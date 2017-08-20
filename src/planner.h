@@ -9,34 +9,78 @@ namespace plt = matplotlibcpp;
 using namespace std;
 
 
-vector<vector<double>> get_highway_wp(std::string filepath) {
-      std::ifstream file(filepath);
-      vector<vector<double>> wp(5);
-      while (file) {
-        std::string line;
-        std::getline(file, line);
-        std::stringstream line_stream(line);
-        if (!line.empty()) {
-          for (int i = 0; i < 5; ++i) {
-            std::string data;
-            std::getline(line_stream, data, ' ');
-            //cout << " >>" << data << "<< ";
-            wp[i].push_back(std::stod(data));
-          }
-        }
-      }
-      file.close();
-      return wp;
-}
+class Car {
+ public:
+  double x, y, s, d, yaw, speed;
 
-void plot_highway_wp() {
-  auto wp = get_highway_wp("../data/highway_map.csv");
-  vector<double> xs = wp[0], ys = wp[1], dxs = wp[3], dys = wp[4];
-  int width = 50;
-  plt::plot(xs, ys);
-  for (int i = 0; i < dxs.size(); ++i) {
-    plt::plot({xs[i], xs[i]+width*dxs[i]}, {ys[i], ys[i]+width*dys[i]}, "g");
-    plt::plot({xs[i]+width*dxs[i]}, {ys[i]+width*dys[i]}, "g.");
+  Car(double x, double y, double s, double d, double yaw, double speed) {
+    this->x = x;
+    this->y = y;
+    this->s = s;
+    this->d = d;
+    this->yaw = yaw;
+    this->speed = speed;
   }
-  plt::show();
-}
+};
+
+
+class Trajectory {
+
+ private:
+  vector<double> xs, ys, ss, dxs, dys;
+  int size;
+
+ public:
+
+  Trajectory(vector<double> xs, vector<double> ys, vector<double> ss, vector<double> dxs, vector<double> dys) {
+    this->xs = xs;
+    this->ys = ys;
+    this->ss = ss;
+    this->dxs = dxs;
+    this->dys = dys;
+    this->size = xs.size();
+  }
+
+  vector<double> slice(vector<double> vec, int start, int c) {
+    if (start + c < vec.size())
+      return vector<double>(vec.begin() + start, vec.begin() + start + c);
+    int extra = (start + c) - vec.size();
+    vector<double> res = vector<double>(vec.begin() + start, vec.end());
+    res.insert(res.end(), vec.begin(), vec.begin() + extra);
+    return res;
+  }
+
+  vector<vector<double>> next_path(Car car) {
+    int i=0, j=1;
+    while(true) {
+      if (this->ss[i]<= car.s && car.s < this->ss[j]) {
+        vector<double> xs = slice(this->xs, j, 50);
+        vector<double> ys = slice(this->ys, j, 50);
+        return { xs, ys };
+      }
+      if (this->ss[j]<= car.s && car.s < this->ss[i]) {
+        vector<double> xs = slice(this->xs, i, 50);
+        vector<double> ys = slice(this->ys, i, 50);
+        return { xs, ys };
+      }
+      i = (i+1) % this->size;
+      j = (j+1) % this->size;
+    }
+
+  }
+
+  void plot_highway() {
+    int width = 50;
+    plt::plot(xs, ys);
+    for (int i = 0; i < dxs.size(); ++i) {
+      plt::plot({xs[i], xs[i]+width*dxs[i]}, {ys[i], ys[i]+width*dys[i]}, "g");
+      plt::plot({xs[i]+width*dxs[i]}, {ys[i]+width*dys[i]}, "g.");
+    }
+  }
+
+  void plot_car_in_highway(Car car) {
+    plt::plot({car.x}, {car.y}, "r*");
+  }
+
+};
+

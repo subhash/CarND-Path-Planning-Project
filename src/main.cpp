@@ -10,6 +10,9 @@
 #include "json.hpp"
 #include "planner.h"
 
+#include "matplotlibcpp.h"
+
+namespace plt = matplotlibcpp;
 using namespace std;
 
 // for convenience
@@ -161,10 +164,6 @@ vector<double> getXY(double s, double d, vector<double> maps_s, vector<double> m
 }
 
 int main() {
-  plot_highway_wp();
-}
-
-int main2() {
   uWS::Hub h;
 
   // Load up map values for waypoint's x,y,s and d normalized normal vectors
@@ -201,7 +200,17 @@ int main2() {
   	map_waypoints_dy.push_back(d_y);
   }
 
-  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  Trajectory traj = Trajectory(map_waypoints_x, map_waypoints_y, map_waypoints_s, map_waypoints_dx, map_waypoints_dy);
+  Car car = Car(map_waypoints_x[0], map_waypoints_y[0], map_waypoints_s[0]+1000, 0.0, 0.0, 0.0);
+  traj.plot_highway();
+  traj.plot_car_in_highway(car);
+  auto vec = traj.next_path(car);
+  plt::plot(vec[0], vec[1], "r.");
+  plt::show();
+
+
+
+  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy, &traj](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -228,6 +237,13 @@ int main2() {
           	double car_yaw = j[1]["yaw"];
           	double car_speed = j[1]["speed"];
 
+          	Car car = Car(car_x, car_y, car_s, car_d, car_yaw, car_speed);
+
+            traj.plot_highway();
+          	traj.plot_car_in_highway(car);
+          	plt::show();
+          	exit(0);
+
           	// Previous path data given to the Planner
           	auto previous_path_x = j[1]["previous_path_x"];
           	auto previous_path_y = j[1]["previous_path_y"];
@@ -242,6 +258,24 @@ int main2() {
 
           	vector<double> next_x_vals;
           	vector<double> next_y_vals;
+
+
+//          	// Straight path
+//          	double inc = 0.25;
+//          	for (int i = 0; i < 50; ++i) {
+//              next_x_vals.push_back(car_x + i*inc*cos(car_yaw));
+//              next_y_vals.push_back(car_y + i*inc*sin(car_yaw));
+//            }
+
+//            // Circular path
+//            double inc = 0.5, angle = deg2rad(car_yaw);
+//            for (int i = 0; i < 50; ++i) {
+//              car_x += inc*cos(angle + (i+1)*deg2rad(0.2));
+//              car_y += inc*sin(angle + (i+1)*deg2rad(0.2));
+//              next_x_vals.push_back(car_x);
+//              next_y_vals.push_back(car_y);
+//            }
+
 
 
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
@@ -293,7 +327,7 @@ int main2() {
     std::cerr << "Failed to listen to port" << std::endl;
     return -1;
   }
-  h.run();
+  //h.run();
 }
 
 
