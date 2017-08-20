@@ -8,6 +8,7 @@
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "json.hpp"
+#include "planner.h"
 
 using namespace std;
 
@@ -160,6 +161,10 @@ vector<double> getXY(double s, double d, vector<double> maps_s, vector<double> m
 }
 
 int main() {
+  plot_highway_wp();
+}
+
+int main2() {
   uWS::Hub h;
 
   // Load up map values for waypoint's x,y,s and d normalized normal vectors
