@@ -60,9 +60,14 @@ class Car {
   }
 };
 
-class Path;
-
 class Trajectory {
+ public:
+
+};
+
+class JMT;
+
+class Highway {
 
  private:
   vector<double> xs, ys, ss, dxs, dys;
@@ -70,30 +75,118 @@ class Trajectory {
 
  public:
 
-  Trajectory(vector<double> xs, vector<double> ys, vector<double> ss, vector<double> dxs, vector<double> dys);
+  Highway(vector<double> xs, vector<double> ys, vector<double> ss, vector<double> dxs, vector<double> dys) {
+    this->xs = xs;
+    this->ys = ys;
+    this->ss = ss;
+    this->dxs = dxs;
+    this->dys = dys;
+    this->size = xs.size();
+  }
 
-  vector<double> slice(vector<double> vec, int start, int c);
+  vector<double> slice(vector<double> vec, int start, int c) {
+    if (start + c < vec.size())
+      return vector<double>(vec.begin() + start, vec.begin() + start + c);
+    int extra = (start + c) - vec.size();
+    vector<double> res = vector<double>(vec.begin() + start, vec.end());
+    res.insert(res.end(), vec.begin(), vec.begin() + extra);
+    return res;
+  }
 
-  int closest_waypoint(Car car);
+  int closest_waypoint(Car car) {
+    vector<double> distances(this->size);
+    transform(this->xs.begin(), this->xs.end(), this->ys.begin(), distances.begin(),
+              [car](const double& x, const double& y) { return euclidean_distance(x, y, car.x, car.y); });
+    return std::distance(distances.begin(), min_element(distances.begin(), distances.end()));
+  }
 
-  int next_waypoint(Car car);
+  int next_waypoint(Car car) {
+    int next = closest_waypoint(car);
+    double wx = this->xs[next], wy = this->ys[next];
+    double angle = atan2(wy-car.y, wx-car.x);
+    if (fabs(angle-car.yaw) > M_PI/4) {
+      next ++;
+    }
+    return next;
+  }
 
-  Path next_path(Car car, double speed_limit);
+  std::pair<vector<double>, vector<double>> next_traj(Car car) {
+    vector<double> xpts, ypts;
+    double inc = 0.5;
+    for (int i = 0; i < 50; ++i) {
+      double s = car.s + (i+1)*inc;
+      auto xy = this->getXY(s, car.d);
+      xpts.push_back(xy[0]);
+      ypts.push_back(xy[1]);
+    }
+    return std::make_pair(xpts, ypts);
+  }
 
-  vector<double> getXY(double s, double d);
+  JMT next_path(Car car, double speed_limit);
 
-  void plot_highway(Car car, int section, int width);
+  vector<double> getXY(double s, double d) {
+    return ::getXY(s, d, this->ss, this->xs, this->ys);
+  }
 
-  void plot_highway(int section, int width);
+  void plot_highway(Car car, int section = 10000, int width = 50) {
+    plt::plot({car.x}, {car.y}, "r*");
+    this->plot_highway(section, width);
+  }
+
+  void plot_highway(int section = 10000, int width = 50) {
+    if (section > dxs.size()) {
+      plt::plot(xs, ys);
+      section = dxs.size();
+    }
+    for (int i = 0; i < section; ++i) {
+      plt::plot({xs[i], xs[i]+width*dxs[i]}, {ys[i], ys[i]+width*dys[i]}, "g");
+      plt::plot({xs[i]+width*dxs[i]}, {ys[i]+width*dys[i]}, "g.");
+    }
+  }
 
 };
 
-class Path {
+class Poly {
+ private:
+  vector<double> coords;
+
+ public:
+  Poly(vector<double> coords) {
+    this->coords = coords;
+  }
+
+  double value_at(double t) {
+    double val = 0.0;
+    for (int j=0; j<this->coords.size(); j++) val += this->coords[j]*pow(t,j);
+    return val;
+  }
+
+  void plot(double start, double end, double inc) {
+    double t = start;
+    vector<double> c = this->coords;
+    vector<double> p1, p2, p3;
+    while(t<end){
+      double t2=t*t, t3=t2*t, t4=t3*t, t5=t4*t;
+      double f = c[0] + c[1]*t + c[2]*t2 + c[3]*t3 + c[4]*t4 + c[5]*t5;
+      double f_dot = c[1] + 2*c[2]*t + 3*c[3]*t2 + 4*c[4]*t3 + 5*c[5]*t4;
+      double f_ddot = 2*c[2] + 6*c[3]*t + 12*c[4]*t2 + 20*c[5]*t3;
+      p1.push_back(f);
+      p2.push_back(f_dot);
+      p3.push_back(f_ddot);
+      t += inc;
+    }
+    plt::plot(p1, "r");
+    plt::plot(p2, "g");
+    plt::plot(p3, "b");
+  }
+};
+
+class JMT {
  private:
   vector<double> s_vec, d_vec;
 
  public:
-  Path(vector<double> s_vec, vector<double> d_vec) {
+  JMT(vector<double> s_vec, vector<double> d_vec) {
     this->s_vec = s_vec;
     this->d_vec = d_vec;
   }
@@ -104,13 +197,13 @@ class Path {
     return std::make_pair(slen, dlen);
   }
 
-  vector<vector<double>> interpolate(double tf);
+  std::pair<Poly, Poly> interpolate(double tf);
 
-  std::pair<vector<double>, vector<double>> generate_points(double tf, Trajectory& traj);
+  vector<vector<double>> generate_points(double tf, Highway& highway);
 };
 
 
-vector<vector<double>> Path::interpolate(double tf) {
+std::pair<Poly, Poly> JMT::interpolate(double tf) {
   double t = tf, t2 = t*t, t3 = t2*t, t4 = t3*t, t5 = t4*t;
   MatrixXd Tmat(3, 3);
   Tmat << t3, t4, t5,
@@ -129,85 +222,37 @@ vector<vector<double>> Path::interpolate(double tf) {
   VectorXd Dvec = Tinv*Dmat;
   vector<double> s_poly = { this->s_vec[0], this->s_vec[1], this->s_vec[2]/2.0, Svec(0), Svec(1), Svec(2) };
   vector<double> d_poly = { this->d_vec[0], this->d_vec[1], this->d_vec[2]/2.0, Dvec(0), Dvec(1), Dvec(2) };
-  return { s_poly, d_poly };
+  cout << "spoly - ";
+  for (int i = 0; i < s_poly.size(); ++i) {
+    cout << s_poly[i] << ", ";
+  }
+  cout << endl;
+  return std::make_pair(Poly(s_poly), Poly(d_poly)) ;
 }
 
-std::pair<vector<double>, vector<double>> Path::generate_points(double tf, Trajectory& traj) {
-  auto poly = interpolate(tf);
-  vector<double> xpts, ypts;
-  double inc = tf/50.0;
+vector<vector<double>> JMT::generate_points(double tf, Highway& highway) {
+  auto polys = interpolate(tf);
+  vector<double> xpts, ypts, ss, ds, ts;
+  double inc = (tf/50.0);
   cout << "inc - "<< inc << endl;
   for (int i=0; i<50; i++) {
     double t=inc*(i+1), s=0, d=0;
-    for (int j=0; j<poly[0].size(); j++) s += poly[0][j]*pow(t,j);
-    for (int j=0; j<poly[1].size(); j++) d += poly[1][j]*pow(t,j);
-    auto xy = traj.getXY(s, d);
+    s += polys.first.value_at(t);
+    d += polys.second.value_at(t);
+    ss.push_back(s);
+    ds.push_back(d);
+    ts.push_back(t);
+    auto xy = highway.getXY(s, d);
     xpts.push_back(xy[0]);
     ypts.push_back(xy[1]);
   }
-  return std::make_pair(xpts, ypts);
+  return { xpts, ypts, ss, ds, ts};
 }
 
-
-
-Trajectory::Trajectory(vector<double> xs, vector<double> ys, vector<double> ss, vector<double> dxs, vector<double> dys) {
-  this->xs = xs;
-  this->ys = ys;
-  this->ss = ss;
-  this->dxs = dxs;
-  this->dys = dys;
-  this->size = xs.size();
-}
-
-vector<double> Trajectory::slice(vector<double> vec, int start, int c) {
-  if (start + c < vec.size())
-    return vector<double>(vec.begin() + start, vec.begin() + start + c);
-  int extra = (start + c) - vec.size();
-  vector<double> res = vector<double>(vec.begin() + start, vec.end());
-  res.insert(res.end(), vec.begin(), vec.begin() + extra);
-  return res;
-}
-
-int Trajectory::closest_waypoint(Car car) {
-  vector<double> distances(this->size);
-  transform(this->xs.begin(), this->xs.end(), this->ys.begin(), distances.begin(),
-            [car](const double& x, const double& y) { return euclidean_distance(x, y, car.x, car.y); });
-  return std::distance(distances.begin(), min_element(distances.begin(), distances.end()));
-}
-
-int Trajectory::next_waypoint(Car car) {
-  int next = closest_waypoint(car);
-  double wx = this->xs[next], wy = this->ys[next];
-  double angle = atan2(wy-car.y, wx-car.x);
-  if (fabs(angle-car.yaw) > M_PI/4) {
-    next ++;
-  }
-  return next;
-}
-
-Path Trajectory::next_path(Car car, double speed_limit) {
+JMT Highway::next_path(Car car, double max_speed) {
   int wp = next_waypoint(car);
-  vector<double> s_vec = {car.s, car.speed, 0, this->ss[wp], speed_limit, 8.0};
+  double s_delta = this->ss[wp] - car.s;
+  vector<double> s_vec = {car.s, car.speed, 0, this->ss[wp], 8, 8.0};
   vector<double> d_vec = {car.d, 0, 0, car.d, 0, 0};
-  return Path(s_vec, d_vec);
-}
-
-vector<double> Trajectory::getXY(double s, double d) {
-  return ::getXY(s, d, this->ss, this->xs, this->ys);
-}
-
-void Trajectory::plot_highway(Car car, int section = 10000, int width = 50) {
-  plt::plot({car.x}, {car.y}, "r*");
-  this->plot_highway(section, width);
-}
-
-void Trajectory::plot_highway(int section = 10000, int width = 50) {
-  if (section > dxs.size()) {
-    plt::plot(xs, ys);
-    section = dxs.size();
-  }
-  for (int i = 0; i < section; ++i) {
-    plt::plot({xs[i], xs[i]+width*dxs[i]}, {ys[i], ys[i]+width*dys[i]}, "g");
-    plt::plot({xs[i]+width*dxs[i]}, {ys[i]+width*dys[i]}, "g.");
-  }
+  return JMT(s_vec, d_vec);
 }

@@ -173,35 +173,30 @@ int main() {
   	map_waypoints_dy.push_back(d_y);
   }
 
-  Trajectory traj = Trajectory(map_waypoints_x, map_waypoints_y, map_waypoints_s, map_waypoints_dx, map_waypoints_dy);
-  Car car = Car(909.48, 1128.67, 124.834, 6.16483,  0, 0);
-
-  int next_wp = traj.next_waypoint(car);
-  Path path = traj.next_path(car, 0.0);
-  auto len = path.length();
-  double time = len.first/25.0;
-  cout << "time "<< time << ", len "<< len.first << ", " << len.second << endl;
-  auto pts = path.generate_points(time, traj);
+  Highway highway = Highway(map_waypoints_x, map_waypoints_y, map_waypoints_s, map_waypoints_dx, map_waypoints_dy);
 
 
-  traj.plot_highway(car, 15, 2);
-  plt::plot({map_waypoints_x[next_wp]}, {map_waypoints_y[next_wp]}, "bx");
-  //vector<double> dst = getXY(map_waypoints_s[next_wp], car.d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-  //plt::plot({dst[0]}, {dst[1]}, "bs");
-  plt::plot(pts.first, pts.second, "r.");
-  plt::show();
+//  Car car = Car(909.48, 1128.67, 124.834, 6.16483,  0, 0);
+//  int next_wp = highway.next_waypoint(car);
+//  auto pts = highway.next_traj(car);
+//  plt::subplot(2,1,1);
+//  highway.plot_highway(car, 15, 2);
+//  vector<double> dst = getXY(map_waypoints_s[next_wp], car.d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+//  plt::plot({dst[0]}, {dst[1]}, "bs");
+//  plt::plot(pts.first, pts.second, "r.");
+//  plt::show();
 
 
 //  Car car = Car(map_waypoints_x[0], map_waypoints_y[0], map_waypoints_s[0]+1000, 0.0, 0.0, 0.0);
-//  traj.plot_highway();
-//  traj.plot_car_in_highway(car);
-//  auto vec = traj.next_path(car);
+//  highway.plot_highway();
+//  highway.plot_car_in_highway(car);
+//  auto vec = highway.next_path(car);
 //  plt::plot(vec[0], vec[1], "r.");
 //  plt::show();
 
 
 
-  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy, &traj](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy, &highway](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -261,29 +256,12 @@ int main() {
 //            }
 
 
-
+          	// Lane following
             Car car = Car(car_x, car_y, car_s, car_d, car_yaw, car_speed);
-            int next_wp = traj.next_waypoint(car);
-            Path p = traj.next_path(car, 0.0000001);
-            vector<vector<double>> poly = p.interpolate(1.0);
-            cout << "Car - "<< car.speed << ", s - "<< car.s << ",d -" << car.d <<  endl;
-            cout << "Car - x "<< car.x <<" , y = " << car.y << ", yaw - " << car.yaw << " speed - "<< car.speed << endl;
-            cout << "Next wp - " << next_wp << ", "<< map_waypoints_s[next_wp] << endl;
+            auto pts = highway.next_traj(car);
 
-            for (int i=0; i<50; i++) {
-              double t=0.02*(i+1), s=0, d=0;
-              for (int j=0; j<poly[0].size(); j++) s += poly[0][j]*pow(t,j);
-              for (int j=0; j<poly[1].size(); j++) d += poly[1][j]*pow(t,j);
-              auto xy = getXY(s, d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-              cout << "s - " << s << " d  - "<< d << endl;
-              next_x_vals.push_back(xy[0]);
-              next_y_vals.push_back(xy[1]);
-            }
-
-//            traj.plot_highway();
-//            plt::plot(next_x_vals, next_y_vals, "bx");
-//            plt::show();
-
+            next_x_vals = pts.first;
+            next_y_vals = pts.second;
 
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
           	msgJson["next_x"] = next_x_vals;
@@ -294,7 +272,6 @@ int main() {
           	//this_thread::sleep_for(chrono::milliseconds(1000));
           	ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
 
-            exit(0);
 
           
         }
@@ -337,7 +314,7 @@ int main() {
     std::cerr << "Failed to listen to port" << std::endl;
     return -1;
   }
-  //h.run();
+  h.run();
 }
 
 
