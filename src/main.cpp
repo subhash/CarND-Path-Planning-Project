@@ -135,33 +135,6 @@ vector<double> getFrenet(double x, double y, double theta, vector<double> maps_x
 
 }
 
-// Transform from Frenet s,d coordinates to Cartesian x,y
-vector<double> getXY(double s, double d, vector<double> maps_s, vector<double> maps_x, vector<double> maps_y)
-{
-	int prev_wp = -1;
-
-	while(s > maps_s[prev_wp+1] && (prev_wp < (int)(maps_s.size()-1) ))
-	{
-		prev_wp++;
-	}
-
-	int wp2 = (prev_wp+1)%maps_x.size();
-
-	double heading = atan2((maps_y[wp2]-maps_y[prev_wp]),(maps_x[wp2]-maps_x[prev_wp]));
-	// the x,y,s along the segment
-	double seg_s = (s-maps_s[prev_wp]);
-
-	double seg_x = maps_x[prev_wp]+seg_s*cos(heading);
-	double seg_y = maps_y[prev_wp]+seg_s*sin(heading);
-
-	double perp_heading = heading-pi()/2;
-
-	double x = seg_x + d*cos(perp_heading);
-	double y = seg_y + d*sin(perp_heading);
-
-	return {x,y};
-
-}
 
 int main() {
   uWS::Hub h;
@@ -201,12 +174,30 @@ int main() {
   }
 
   Trajectory traj = Trajectory(map_waypoints_x, map_waypoints_y, map_waypoints_s, map_waypoints_dx, map_waypoints_dy);
-  Car car = Car(map_waypoints_x[0], map_waypoints_y[0], map_waypoints_s[0]+1000, 0.0, 0.0, 0.0);
-  traj.plot_highway();
-  traj.plot_car_in_highway(car);
-  auto vec = traj.next_path(car);
-  plt::plot(vec[0], vec[1], "r.");
+  Car car = Car(909.48, 1128.67, 124.834, 6.16483,  0, 0);
+
+  int next_wp = traj.next_waypoint(car);
+  Path path = traj.next_path(car, 0.0);
+  auto len = path.length();
+  double time = len.first/25.0;
+  cout << "time "<< time << ", len "<< len.first << ", " << len.second << endl;
+  auto pts = path.generate_points(time, traj);
+
+
+  traj.plot_highway(car, 15, 2);
+  plt::plot({map_waypoints_x[next_wp]}, {map_waypoints_y[next_wp]}, "bx");
+  //vector<double> dst = getXY(map_waypoints_s[next_wp], car.d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+  //plt::plot({dst[0]}, {dst[1]}, "bs");
+  plt::plot(pts.first, pts.second, "r.");
   plt::show();
+
+
+//  Car car = Car(map_waypoints_x[0], map_waypoints_y[0], map_waypoints_s[0]+1000, 0.0, 0.0, 0.0);
+//  traj.plot_highway();
+//  traj.plot_car_in_highway(car);
+//  auto vec = traj.next_path(car);
+//  plt::plot(vec[0], vec[1], "r.");
+//  plt::show();
 
 
 
@@ -236,13 +227,6 @@ int main() {
           	double car_d = j[1]["d"];
           	double car_yaw = j[1]["yaw"];
           	double car_speed = j[1]["speed"];
-
-          	Car car = Car(car_x, car_y, car_s, car_d, car_yaw, car_speed);
-
-            traj.plot_highway();
-          	traj.plot_car_in_highway(car);
-          	plt::show();
-          	exit(0);
 
           	// Previous path data given to the Planner
           	auto previous_path_x = j[1]["previous_path_x"];
@@ -278,6 +262,29 @@ int main() {
 
 
 
+            Car car = Car(car_x, car_y, car_s, car_d, car_yaw, car_speed);
+            int next_wp = traj.next_waypoint(car);
+            Path p = traj.next_path(car, 0.0000001);
+            vector<vector<double>> poly = p.interpolate(1.0);
+            cout << "Car - "<< car.speed << ", s - "<< car.s << ",d -" << car.d <<  endl;
+            cout << "Car - x "<< car.x <<" , y = " << car.y << ", yaw - " << car.yaw << " speed - "<< car.speed << endl;
+            cout << "Next wp - " << next_wp << ", "<< map_waypoints_s[next_wp] << endl;
+
+            for (int i=0; i<50; i++) {
+              double t=0.02*(i+1), s=0, d=0;
+              for (int j=0; j<poly[0].size(); j++) s += poly[0][j]*pow(t,j);
+              for (int j=0; j<poly[1].size(); j++) d += poly[1][j]*pow(t,j);
+              auto xy = getXY(s, d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+              cout << "s - " << s << " d  - "<< d << endl;
+              next_x_vals.push_back(xy[0]);
+              next_y_vals.push_back(xy[1]);
+            }
+
+//            traj.plot_highway();
+//            plt::plot(next_x_vals, next_y_vals, "bx");
+//            plt::show();
+
+
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
           	msgJson["next_x"] = next_x_vals;
           	msgJson["next_y"] = next_y_vals;
@@ -286,6 +293,9 @@ int main() {
 
           	//this_thread::sleep_for(chrono::milliseconds(1000));
           	ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+
+            exit(0);
+
           
         }
       } else {
