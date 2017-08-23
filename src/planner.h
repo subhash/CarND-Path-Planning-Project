@@ -1,22 +1,21 @@
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include "Eigen-3.3/Eigen/Core"
-#include "Eigen-3.3/Eigen/Dense"
-#include "Eigen-3.3/Eigen/QR"
+/*
+ * planner.h
+ *
+ *  Created on: 23-Aug-2017
+ *      Author: subhash
+ */
 
-
-#include "matplotlibcpp.h"
-
-namespace plt = matplotlibcpp;
+#ifndef PLANNER_H_
+#define PLANNER_H_
 
 using namespace std;
-using Eigen::MatrixXd;
-using Eigen::VectorXd;
 
-double euclidean_distance(double x1, double y1, double x2, double y2) {
-  return sqrt(pow(x1-x2, 2) + pow(y2-y1, 2));
-}
+
+// For converting back and forth between radians and degrees.
+constexpr double pi() { return M_PI; }
+double deg2rad(double x) { return x * pi() / 180; }
+double rad2deg(double x) { return x * 180 / pi(); }
+
 
 // Transform from Frenet s,d coordinates to Cartesian x,y
 vector<double> getXY(double s, double d, vector<double> maps_s, vector<double> maps_x, vector<double> maps_y)
@@ -46,213 +45,105 @@ vector<double> getXY(double s, double d, vector<double> maps_s, vector<double> m
 
 }
 
-class Car {
- public:
-  double x, y, s, d, yaw, speed;
 
-  Car(double x, double y, double s, double d, double yaw, double speed) {
-    this->x = x;
-    this->y = y;
-    this->s = s;
-    this->d = d;
-    this->yaw = yaw;
-    this->speed = speed;
-  }
-};
+double distance(double x1, double y1, double x2, double y2)
+{
+  return sqrt((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1));
+}
+int ClosestWaypoint(double x, double y, vector<double> maps_x, vector<double> maps_y)
+{
 
-class Trajectory {
- public:
+  double closestLen = 100000; //large number
+  int closestWaypoint = 0;
 
-};
-
-class JMT;
-
-class Highway {
-
- private:
-  vector<double> xs, ys, ss, dxs, dys;
-  int size;
-
- public:
-
-  Highway(vector<double> xs, vector<double> ys, vector<double> ss, vector<double> dxs, vector<double> dys) {
-    this->xs = xs;
-    this->ys = ys;
-    this->ss = ss;
-    this->dxs = dxs;
-    this->dys = dys;
-    this->size = xs.size();
-  }
-
-  vector<double> slice(vector<double> vec, int start, int c) {
-    if (start + c < vec.size())
-      return vector<double>(vec.begin() + start, vec.begin() + start + c);
-    int extra = (start + c) - vec.size();
-    vector<double> res = vector<double>(vec.begin() + start, vec.end());
-    res.insert(res.end(), vec.begin(), vec.begin() + extra);
-    return res;
-  }
-
-  int closest_waypoint(Car car) {
-    vector<double> distances(this->size);
-    transform(this->xs.begin(), this->xs.end(), this->ys.begin(), distances.begin(),
-              [car](const double& x, const double& y) { return euclidean_distance(x, y, car.x, car.y); });
-    return std::distance(distances.begin(), min_element(distances.begin(), distances.end()));
-  }
-
-  int next_waypoint(Car car) {
-    int next = closest_waypoint(car);
-    double wx = this->xs[next], wy = this->ys[next];
-    double angle = atan2(wy-car.y, wx-car.x);
-    if (fabs(angle-car.yaw) > M_PI/4) {
-      next ++;
+  for(int i = 0; i < maps_x.size(); i++)
+  {
+    double map_x = maps_x[i];
+    double map_y = maps_y[i];
+    double dist = distance(x,y,map_x,map_y);
+    if(dist < closestLen)
+    {
+      closestLen = dist;
+      closestWaypoint = i;
     }
-    return next;
+
   }
 
-  std::pair<vector<double>, vector<double>> next_traj(Car car) {
-    vector<double> xpts, ypts;
-    double inc = 0.5;
-    for (int i = 0; i < 50; ++i) {
-      double s = car.s + (i+1)*inc;
-      auto xy = this->getXY(s, car.d);
-      xpts.push_back(xy[0]);
-      ypts.push_back(xy[1]);
-    }
-    return std::make_pair(xpts, ypts);
-  }
+  return closestWaypoint;
 
-  JMT next_path(Car car, double speed_limit);
-
-  vector<double> getXY(double s, double d) {
-    return ::getXY(s, d, this->ss, this->xs, this->ys);
-  }
-
-  void plot_highway(Car car, int section = 10000, int width = 50) {
-    plt::plot({car.x}, {car.y}, "r*");
-    this->plot_highway(section, width);
-  }
-
-  void plot_highway(int section = 10000, int width = 50) {
-    if (section > dxs.size()) {
-      plt::plot(xs, ys);
-      section = dxs.size();
-    }
-    for (int i = 0; i < section; ++i) {
-      plt::plot({xs[i], xs[i]+width*dxs[i]}, {ys[i], ys[i]+width*dys[i]}, "g");
-      plt::plot({xs[i]+width*dxs[i]}, {ys[i]+width*dys[i]}, "g.");
-    }
-  }
-
-};
-
-class Poly {
- private:
-  vector<double> coords;
-
- public:
-  Poly(vector<double> coords) {
-    this->coords = coords;
-  }
-
-  double value_at(double t) {
-    double val = 0.0;
-    for (int j=0; j<this->coords.size(); j++) val += this->coords[j]*pow(t,j);
-    return val;
-  }
-
-  void plot(double start, double end, double inc) {
-    double t = start;
-    vector<double> c = this->coords;
-    vector<double> p1, p2, p3;
-    while(t<end){
-      double t2=t*t, t3=t2*t, t4=t3*t, t5=t4*t;
-      double f = c[0] + c[1]*t + c[2]*t2 + c[3]*t3 + c[4]*t4 + c[5]*t5;
-      double f_dot = c[1] + 2*c[2]*t + 3*c[3]*t2 + 4*c[4]*t3 + 5*c[5]*t4;
-      double f_ddot = 2*c[2] + 6*c[3]*t + 12*c[4]*t2 + 20*c[5]*t3;
-      p1.push_back(f);
-      p2.push_back(f_dot);
-      p3.push_back(f_ddot);
-      t += inc;
-    }
-    plt::plot(p1, "r");
-    plt::plot(p2, "g");
-    plt::plot(p3, "b");
-  }
-};
-
-class JMT {
- private:
-  vector<double> s_vec, d_vec;
-
- public:
-  JMT(vector<double> s_vec, vector<double> d_vec) {
-    this->s_vec = s_vec;
-    this->d_vec = d_vec;
-  }
-
-  std::pair<double, double> length() {
-    double slen = this->s_vec[3] - this->s_vec[0];
-    double dlen = this->d_vec[3] - this->d_vec[0];
-    return std::make_pair(slen, dlen);
-  }
-
-  std::pair<Poly, Poly> interpolate(double tf);
-
-  vector<vector<double>> generate_points(double tf, Highway& highway);
-};
-
-
-std::pair<Poly, Poly> JMT::interpolate(double tf) {
-  double t = tf, t2 = t*t, t3 = t2*t, t4 = t3*t, t5 = t4*t;
-  MatrixXd Tmat(3, 3);
-  Tmat << t3, t4, t5,
-          3*t2, 4*t3, 5*t4,
-          6*t, 12*t2, 20*t3;
-  MatrixXd Tinv = Tmat.inverse();
-  VectorXd Smat(3);
-  Smat << this->s_vec[3],
-          this->s_vec[4],
-          this->s_vec[5];
-  VectorXd Dmat(3);
-  Dmat << this->d_vec[3],
-          this->d_vec[4],
-          this->d_vec[5];
-  VectorXd Svec = Tinv*Smat;
-  VectorXd Dvec = Tinv*Dmat;
-  vector<double> s_poly = { this->s_vec[0], this->s_vec[1], this->s_vec[2]/2.0, Svec(0), Svec(1), Svec(2) };
-  vector<double> d_poly = { this->d_vec[0], this->d_vec[1], this->d_vec[2]/2.0, Dvec(0), Dvec(1), Dvec(2) };
-  cout << "spoly - ";
-  for (int i = 0; i < s_poly.size(); ++i) {
-    cout << s_poly[i] << ", ";
-  }
-  cout << endl;
-  return std::make_pair(Poly(s_poly), Poly(d_poly)) ;
 }
 
-vector<vector<double>> JMT::generate_points(double tf, Highway& highway) {
-  auto polys = interpolate(tf);
-  vector<double> xpts, ypts, ss, ds, ts;
-  double inc = (tf/50.0);
-  cout << "inc - "<< inc << endl;
-  for (int i=0; i<50; i++) {
-    double t=inc*(i+1), s=0, d=0;
-    s += polys.first.value_at(t);
-    d += polys.second.value_at(t);
-    ss.push_back(s);
-    ds.push_back(d);
-    ts.push_back(t);
-    auto xy = highway.getXY(s, d);
-    xpts.push_back(xy[0]);
-    ypts.push_back(xy[1]);
+int NextWaypoint(double x, double y, double theta, vector<double> maps_x, vector<double> maps_y)
+{
+
+  int closestWaypoint = ClosestWaypoint(x,y,maps_x,maps_y);
+
+  double map_x = maps_x[closestWaypoint];
+  double map_y = maps_y[closestWaypoint];
+
+  double heading = atan2( (map_y-y),(map_x-x) );
+
+  double angle = abs(theta-heading);
+
+  if(angle > pi()/4)
+  {
+    closestWaypoint++;
   }
-  return { xpts, ypts, ss, ds, ts};
+
+  return closestWaypoint;
+
 }
 
-JMT Highway::next_path(Car car, double max_speed) {
-  int wp = next_waypoint(car);
-  double s_delta = this->ss[wp] - car.s;
-  vector<double> s_vec = {car.s, car.speed, 0, this->ss[wp], 8, 8.0};
-  vector<double> d_vec = {car.d, 0, 0, car.d, 0, 0};
-  return JMT(s_vec, d_vec);
+// Transform from Cartesian x,y coordinates to Frenet s,d coordinates
+vector<double> getFrenet(double x, double y, double theta, vector<double> maps_x, vector<double> maps_y)
+{
+  int next_wp = NextWaypoint(x,y, theta, maps_x,maps_y);
+
+  int prev_wp;
+  prev_wp = next_wp-1;
+  if(next_wp == 0)
+  {
+    prev_wp  = maps_x.size()-1;
+  }
+
+  double n_x = maps_x[next_wp]-maps_x[prev_wp];
+  double n_y = maps_y[next_wp]-maps_y[prev_wp];
+  double x_x = x - maps_x[prev_wp];
+  double x_y = y - maps_y[prev_wp];
+
+  // find the projection of x onto n
+  double proj_norm = (x_x*n_x+x_y*n_y)/(n_x*n_x+n_y*n_y);
+  double proj_x = proj_norm*n_x;
+  double proj_y = proj_norm*n_y;
+
+  double frenet_d = distance(x_x,x_y,proj_x,proj_y);
+
+  //see if d value is positive or negative by comparing it to a center point
+
+  double center_x = 1000-maps_x[prev_wp];
+  double center_y = 2000-maps_y[prev_wp];
+  double centerToPos = distance(center_x,center_y,x_x,x_y);
+  double centerToRef = distance(center_x,center_y,proj_x,proj_y);
+
+  if(centerToPos <= centerToRef)
+  {
+    frenet_d *= -1;
+  }
+
+  // calculate s value
+  double frenet_s = 0;
+  for(int i = 0; i < prev_wp; i++)
+  {
+    frenet_s += distance(maps_x[i],maps_y[i],maps_x[i+1],maps_y[i+1]);
+  }
+
+  frenet_s += distance(0,0,proj_x,proj_y);
+
+  return {frenet_s,frenet_d};
+
 }
+
+
+
+
+#endif /* PLANNER_H_ */
