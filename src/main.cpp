@@ -8,6 +8,7 @@
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "planner.h"
+#include "highway.h"
 #include "json.hpp"
 #include "matplotlibcpp.h"
 
@@ -31,6 +32,62 @@ string hasData(string s) {
     return s.substr(b1, b2 - b1 + 2);
   }
   return "";
+}
+
+void plot_debug(Planner planner, Highway highway) {
+  //double car_s = 124.834, car_d = 6.16483;
+  //double car_s = 390, car_d = 6.16483;
+  double car_s = 124.834, car_d = 6.16483;
+  Car car = Car(909.48, 1128.67, car_s, car_d,  0, 0);
+
+  double x = 0, y = 0, prev_dist = 0;
+  vector<double> ddist, dvel, infl_x, infl_y;
+  vector<double> xpts1, ypts1;
+
+  Vehicle vehicle(909.48, 1128.67, car_s, car_d,  0, 20);
+  for (int i=0; i<50*240; i++) {
+    vehicle.step(20, 0.02, planner);
+//    vector<double> xy1 = getXY(s, d, highway.ss, highway.xs, highway.ys);
+//    xpts1.push_back(xy1[0]);
+//    ypts1.push_back(xy1[1]);
+//    if (x!=0) {
+//      double dist = sqrt(pow(vehicle.x-x,2)+pow(vehicle.y-y,2));
+//      ddist.push_back(dist);
+//      if(prev_dist !=0) {
+//        double diff = fabs(dist-prev_dist);
+//        dvel.push_back(diff);
+//        if ((diff) > 5e-5){
+//          infl_x.push_back(vehicle.x);
+//          infl_y.push_back(vehicle.y);
+//        }
+//      }
+//      //cout << diff << ", " << dist << endl;
+//      prev_dist = dist;
+//    }
+//    x = vehicle.x;
+//    y = vehicle.y;
+  }
+  plt::subplot(4,1,1);
+  highway.plot_highway(car);
+  plt::plot(vehicle.xs, vehicle.ys, "r.");
+  //plt::plot(infl_x, infl_y, "b.");
+  plt::subplot(4,1,2);
+  plt::plot(vehicle.vs);
+  plt::subplot(4,1,3);
+  vehicle.as.erase(vehicle.as.begin(), vehicle.as.begin()+2);
+  plt::plot(vehicle.as);
+  plt::subplot(4,1,4);
+  vehicle.js.erase(vehicle.js.begin(), vehicle.js.begin()+3);
+  plt::plot(vehicle.js);
+
+
+    cout << max_element(vehicle.as.begin(), vehicle.as.end()) - vehicle.as.begin() << ", "<< min_element(vehicle.as.begin(), vehicle.as.end()) - vehicle.as.begin() << endl;
+    cout << max_element(vehicle.js.begin(), vehicle.js.end()) - vehicle.js.begin() << ", "<< min_element(vehicle.js.begin(), vehicle.js.end()) - vehicle.js.begin() << endl;
+    cout << *max_element(vehicle.js.begin(), vehicle.js.end()) << ", "<< *min_element(vehicle.js.begin(), vehicle.js.end()) << endl;
+
+  plt::show();
+  exit(0);
+
 }
 
 int main() {
@@ -70,7 +127,14 @@ int main() {
   	map_waypoints_dy.push_back(d_y);
   }
 
-  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  Planner planner(map_waypoints_x, map_waypoints_y, map_waypoints_s, map_waypoints_dx, map_waypoints_dy);
+
+  Highway highway = Highway(map_waypoints_x, map_waypoints_y, map_waypoints_s, map_waypoints_dx, map_waypoints_dy);
+
+  //plot_debug(planner, highway);
+  //car_debug(planner, highway);
+
+  h.onMessage([&planner,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -129,13 +193,36 @@ int main() {
 //              next_y_vals.push_back(car_y);
 //            }
 
-          	double inc = 0.2;
-          	for (int i=0; i<50; i++) {
-          	  double s = car_s+(i+1)*inc, d = 6;
-          	  vector<double> xy = getXY(s, d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          	  next_x_vals.push_back(xy[0]);
-          	  next_y_vals.push_back(xy[1]);
-          	}
+//          	double speed_limit = 49;
+//          	if (car.speed < speed_limit) {
+//          	  car.speed += 5;
+//          	}
+//            if (car.speed > speed_limit) {
+//              car.speed -= 5;
+//            }
+//
+
+//            double time = 0.02, speed_limit = 30, acc_limit = 10;
+//            Car car = Car(car_x, car_y, car_s, car_d, car_yaw, speed_limit);
+//            double d = 6;
+//            for (int i = 0; i < 500; ++i) {
+//              //car.adjust_speed(speed_limit, acc_limit, time);
+//              car.step(time);
+//              vector<double> xy = planner.getXY(car.s, d);
+//              next_x_vals.push_back(xy[0]);
+//              next_y_vals.push_back(xy[1]);
+//            }
+
+
+          	Vehicle vehicle(car_x, car_y, car_s, car_d, car_yaw, 18);
+          	for (int i = 0; i < 2000; ++i) {
+              vehicle.step(18, 0.02, planner);
+            }
+          	vehicle.print_stats();
+
+          	next_x_vals = vehicle.xs;
+          	next_y_vals = vehicle.ys;
+
 
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
           	msgJson["next_x"] = next_x_vals;

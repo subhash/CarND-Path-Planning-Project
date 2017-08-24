@@ -1,3 +1,5 @@
+#include "spline.h"
+
 /*
  * planner.h
  *
@@ -143,6 +145,102 @@ vector<double> getFrenet(double x, double y, double theta, vector<double> maps_x
 
 }
 
+
+class Planner {
+
+ private:
+  vector<double> xs, ys, ss, dxs, dys;
+  int size;
+  tk::spline WP_spline_x, WP_spline_y, WP_spline_dx, WP_spline_dy;
+
+ public:
+
+  Planner(vector<double> xs, vector<double> ys, vector<double> ss, vector<double> dxs, vector<double> dys) {
+    this->xs = xs;
+    this->ys = ys;
+    this->ss = ss;
+    this->dxs = dxs;
+    this->dys = dys;
+    this->size = xs.size();
+
+    WP_spline_x.set_points(ss, xs);
+    WP_spline_y.set_points(ss, ys);
+    WP_spline_dx.set_points(ss, dxs);
+    WP_spline_dy.set_points(ss, dys);
+  }
+
+
+  vector<double> getXY(double s, double d) {
+    double x = WP_spline_x(s), y = WP_spline_y(s);
+    double dx = WP_spline_dx(s) * d, dy = WP_spline_dy(s) * d;
+    return { x+dx, y+dy };
+  }
+
+
+};
+
+class Vehicle {
+ public:
+  double x, y, s, d, yaw, v, a, j;
+  vector<double> xs, ys, ss, vs, as, js;
+  const double conv = 0.44703;
+
+  Vehicle(double x, double y, double s, double d, double yaw, double speed) {
+    this->x = x;
+    this->y = y;
+    this->s = s;
+    this->d = d;
+    this->yaw = yaw;
+    this->v = speed;
+    this->a = 0;
+    this->j = 0;
+
+    this->xs.push_back(x);
+    this->ys.push_back(y);
+    this->ss.push_back(s);
+  }
+
+//  void adjust_speed(double speed_limit, double acc_limit, double time) {
+//    double max_speed = speed_limit * conv;
+//    double max_speed_inc = acc_limit * time;
+//    double inc = max_speed - this->v;
+//    if (inc > max_speed_inc) inc = max_speed_inc;
+//    this->v += inc;
+//  }
+
+  void step(double speed, double time, Planner planner) {
+    this->s += speed * time;
+    vector<double> xy = planner.getXY(s, 6);
+    double x = xy[0];
+    double y = xy[1];
+    double dist = sqrt(pow(x-this->x, 2) + pow(y-this->y, 2));
+    double v = dist/time;
+    double a = (v - this->v)/time;
+    double j = (a - this->a)/time;
+
+    this->x = x;
+    this->y = y;
+    this->v = v;
+    this->a = a;
+    this->j = j;
+
+    this->xs.push_back(x);
+    this->ys.push_back(y);
+    this->ss.push_back(s);
+    this->vs.push_back(v);
+    this->as.push_back(a);
+    this->js.push_back(j);
+  }
+
+  void print_stats() {
+    int min_acc = min_element(this->as.begin()+2, this->as.end()) - this->as.begin();
+    int max_acc = max_element(this->as.begin()+2, this->as.end()) - this->as.begin();
+    int min_jerk = min_element(this->js.begin()+3, this->js.end()) - this->js.begin();
+    int max_jerk = max_element(this->js.begin()+3, this->js.end()) - this->js.begin();
+    cout << "Acc: " << this->as[min_acc] << "["<< min_acc << "], " << this->as[max_acc] << "["<< max_acc << "]" << endl;
+    cout << "Jrk: " << this->js[min_jerk] << "["<< min_jerk << "], " << this->js[max_jerk] << "["<< max_jerk << "]" << endl;
+  }
+};
 
 
 
