@@ -182,9 +182,9 @@ class Planner {
 class Vehicle {
  public:
   double x, y, s, d, yaw, v, a, j;
-  vector<double> xs, ys, ss, vs, as, js, verr_xs, verr_ys;
-  const double conv = 0.44703;
-  const double speed_limit = 50*conv, acc_limit = 10;
+  vector<double> xs, ys, ss;
+  vector<double> vs, as, js;
+  vector<double> verr_xs, verr_ys, verr, aerr_xs, aerr_ys, aerr;
   int iter = 0;
   bool initialized = false;
 
@@ -199,7 +199,7 @@ class Vehicle {
     this->s = s;
     this->d = d;
     this->yaw = yaw;
-    this->v = speed*conv;
+    this->v = speed;
     this->a = 0;
     this->j = 0;
 
@@ -216,19 +216,21 @@ class Vehicle {
     }
   }
 
-  void adjust_velocity(double time, double speed_limit, double acc_limit, double jerk_limit) {
-    //cout <<  "v=" <<this->v << endl;
+  double adjust_velocity(double time, double speed_limit, double acc_limit, double jerk_limit) {
     double max_j = jerk_limit * time;
-    double max_a = acc_limit;
+
+    double a = this->a;
     double max_a_inc = max_j * time;
-    double a_inc = max_a - this->a;
+    double a_inc = acc_limit - a;
     if (a_inc > max_a_inc) a_inc = max_a_inc;
-    if (a_inc > 0) this->a += a_inc;
-    double max_v = speed_limit * conv;
-    double max_v_inc = this->a * time;
-    double v_inc = max_v - this->v;
+    if (a_inc > 0) a += a_inc;
+
+    double v = this->v;
+    double max_v_inc = a * time;
+    double v_inc = speed_limit - v;
     if (v_inc > max_v_inc) v_inc = max_v_inc;
-    if (v_inc > 0) this->v += v_inc;
+    if (v_inc > 0) v += v_inc;
+    return v;
   }
 
   double velocity(double x, double y, double time) {
@@ -241,34 +243,36 @@ class Vehicle {
   void move(int steps, double time, double speed_limit, double acc_limit, double jerk_limit, Planner planner) {
     this->trim(steps);
     for (int i = 0; i < steps; ++i) {
-      this->adjust_velocity(time, speed_limit, acc_limit, jerk_limit);
-      this->step(time, planner);
+      double v = this->adjust_velocity(time, speed_limit, acc_limit, jerk_limit);
+      this->step(time, v, speed_limit, acc_limit, planner);
     }
   }
 
-  void step(double time, Planner planner) {
+  void step(double time, double v, double speed_limit, double acc_limit, Planner planner) {
     this->iter++;
-    double s_diff = this->v * time;
+    double s_diff = v * time;
     vector<double> xy = planner.getXY(this->s + s_diff, 6);
-    double v = velocity(xy[0], xy[1], time);
-//    while (v > speed_limit) {
-//      cout << "Correcting speed "<< v <<" against  with "<< s_diff << endl;
-//      v = speed_limit;
+    double corr_v = velocity(xy[0], xy[1], time);
+
+    if (corr_v > speed_limit) {
+      this->verr_xs.push_back(xy[0]);
+      this->verr_ys.push_back(xy[1]);
+      this->verr.push_back(corr_v-speed_limit);
+//      v -= 0.1;
 //      s_diff = v * time;
 //      xy = planner.getXY(this->s + s_diff, 6);
 //      v = velocity(xy[0], xy[1], time);
-//      //cout << "Violated speed at " << xy[0] << ", "<< xy[1] << endl;
-//      this->verr_xs.push_back(xy[0]);
-//      this->verr_ys.push_back(xy[1]);
-//    }
-    double x = xy[0], y = xy[1];
+    }
+
     double a = (v - this->v)/time;
+
     double j = (a - this->a)/time;
+    double x = xy[0], y = xy[1];
 
     this->s += s_diff;
     this->x = x;
     this->y = y;
-    //this->v = v;
+    this->v = v;
     if(this->iter > 1) this->a = a;
     if(this->iter > 2) this->j = j;
 

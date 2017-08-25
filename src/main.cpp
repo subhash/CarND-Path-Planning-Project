@@ -46,11 +46,11 @@ void plot_debug(Planner planner, Highway highway) {
 
   Vehicle vehicle;
   vehicle.init(909.48, 1128.67, car_s, car_d,  0, 0);
-  vehicle.move(50*3, 0.02, 20, 10, 10, planner);
+  vehicle.move(50*240, 0.02, 20, 10, 10, planner);
 
   plt::subplot(4,1,1);
-  highway.plot_highway(car, 3, 1);
-  plt::plot(vehicle.xs, vehicle.ys, "r.");
+  highway.plot_highway(car, 15, 2);
+  plt::plot(vehicle.verr_xs, vehicle.verr_ys, "r.");
   plt::subplot(4,1,2);
   plt::plot(vehicle.vs);
   plt::subplot(4,1,3);
@@ -58,7 +58,7 @@ void plot_debug(Planner planner, Highway highway) {
   plt::plot(vehicle.as);
   plt::subplot(4,1,4);
   vehicle.js.erase(vehicle.js.begin(), vehicle.js.begin()+3);
-  plt::plot(vehicle.js);
+  plt::plot(vehicle.verr);
 
 
     cout << max_element(vehicle.as.begin(), vehicle.as.end()) - vehicle.as.begin() << ", "<< min_element(vehicle.as.begin(), vehicle.as.end()) - vehicle.as.begin() << endl;
@@ -162,10 +162,11 @@ int main() {
 
 
             int nsteps = 5000 - previous_path_x.size();
-            double time = 0.02, speed_limit = 49.5, acc_limit = 10, jerk_limit = 1000;
+            const double speed_conv = 0.44703;
+            double time = 0.02, speed_limit = 49.0 * speed_conv, acc_limit = 10, jerk_limit = 10;
 
             if (!vehicle.initialized)
-              vehicle.init(car_x, car_y, car_s, car_d, car_yaw, car_speed);
+              vehicle.init(car_x, car_y, car_s, car_d, car_yaw, car_speed * speed_conv);
             vehicle.move(nsteps, time, speed_limit, acc_limit, jerk_limit, planner);
 
             for (int i = 1; i < vehicle.xs.size(); ++i) {
