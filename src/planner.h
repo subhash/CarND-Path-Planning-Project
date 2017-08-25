@@ -182,8 +182,9 @@ class Planner {
 class Vehicle {
  public:
   double x, y, s, d, yaw, v, a, j;
-  vector<double> xs, ys, ss, vs, as, js;
+  vector<double> xs, ys, ss, vs, as, js, verr_xs, verr_ys;
   const double conv = 0.44703;
+  const double speed_limit = 50*conv, acc_limit = 10;
 
   Vehicle(double x, double y, double s, double d, double yaw, double speed) {
     this->x = x;
@@ -208,16 +209,31 @@ class Vehicle {
 //    this->v += inc;
 //  }
 
-  void step(double speed, double time, Planner planner) {
-    this->s += speed * time;
-    vector<double> xy = planner.getXY(s, 6);
-    double x = xy[0];
-    double y = xy[1];
+  double velocity(double x, double y, double time) {
     double dist = sqrt(pow(x-this->x, 2) + pow(y-this->y, 2));
     double v = dist/time;
+    return v;
+  }
+
+  void step(double speed, double time, Planner planner) {
+    double s_diff = speed * time;
+    vector<double> xy = planner.getXY(this->s + s_diff, 6);
+    double v = velocity(xy[0], xy[1], time);
+    if (v > speed_limit) {
+//      cout << "Correcting speed "<< v <<" against "<< speed << " with "<< s_diff << endl;
+//      v = speed_limit;
+//      s_diff = v * time;
+//      xy = planner.getXY(this->s + s_diff, 6);
+//      v = velocity(xy[0], xy[1], time);
+      //cout << "Violated speed at " << xy[0] << ", "<< xy[1] << endl;
+      this->verr_xs.push_back(xy[0]);
+      this->verr_ys.push_back(xy[1]);
+    }
+    double x = xy[0], y = xy[1];
     double a = (v - this->v)/time;
     double j = (a - this->a)/time;
 
+    this->s += s_diff;
     this->x = x;
     this->y = y;
     this->v = v;

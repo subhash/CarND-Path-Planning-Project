@@ -46,31 +46,11 @@ void plot_debug(Planner planner, Highway highway) {
 
   Vehicle vehicle(909.48, 1128.67, car_s, car_d,  0, 20);
   for (int i=0; i<50*240; i++) {
-    vehicle.step(20, 0.02, planner);
-//    vector<double> xy1 = getXY(s, d, highway.ss, highway.xs, highway.ys);
-//    xpts1.push_back(xy1[0]);
-//    ypts1.push_back(xy1[1]);
-//    if (x!=0) {
-//      double dist = sqrt(pow(vehicle.x-x,2)+pow(vehicle.y-y,2));
-//      ddist.push_back(dist);
-//      if(prev_dist !=0) {
-//        double diff = fabs(dist-prev_dist);
-//        dvel.push_back(diff);
-//        if ((diff) > 5e-5){
-//          infl_x.push_back(vehicle.x);
-//          infl_y.push_back(vehicle.y);
-//        }
-//      }
-//      //cout << diff << ", " << dist << endl;
-//      prev_dist = dist;
-//    }
-//    x = vehicle.x;
-//    y = vehicle.y;
+    vehicle.step(21, 0.02, planner);
   }
   plt::subplot(4,1,1);
   highway.plot_highway(car);
   plt::plot(vehicle.xs, vehicle.ys, "r.");
-  //plt::plot(infl_x, infl_y, "b.");
   plt::subplot(4,1,2);
   plt::plot(vehicle.vs);
   plt::subplot(4,1,3);
@@ -84,6 +64,8 @@ void plot_debug(Planner planner, Highway highway) {
     cout << max_element(vehicle.as.begin(), vehicle.as.end()) - vehicle.as.begin() << ", "<< min_element(vehicle.as.begin(), vehicle.as.end()) - vehicle.as.begin() << endl;
     cout << max_element(vehicle.js.begin(), vehicle.js.end()) - vehicle.js.begin() << ", "<< min_element(vehicle.js.begin(), vehicle.js.end()) - vehicle.js.begin() << endl;
     cout << *max_element(vehicle.js.begin(), vehicle.js.end()) << ", "<< *min_element(vehicle.js.begin(), vehicle.js.end()) << endl;
+
+  cout << "violated speed at " << vehicle.verr_xs.size() << endl;
 
   plt::show();
   exit(0);
@@ -134,7 +116,8 @@ int main() {
   //plot_debug(planner, highway);
   //car_debug(planner, highway);
 
-  h.onMessage([&planner,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  int step = 0;
+  h.onMessage([&step,&highway,&planner,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -214,14 +197,21 @@ int main() {
 //            }
 
 
-          	Vehicle vehicle(car_x, car_y, car_s, car_d, car_yaw, 18);
-          	for (int i = 0; i < 2000; ++i) {
-              vehicle.step(18, 0.02, planner);
+          	Vehicle vehicle(car_x, car_y, end_path_s, end_path_d, car_yaw, 20);
+          	for (int i = 0; i < 2000-previous_path_x.size(); ++i) {
+              vehicle.step(20, 0.02, planner);
             }
-          	vehicle.print_stats();
+          	//vehicle.print_stats();
 
-          	next_x_vals = vehicle.xs;
-          	next_y_vals = vehicle.ys;
+          	for (int i = 0; i < previous_path_x.size(); ++i) {
+              next_x_vals.push_back(previous_path_x[i]);
+              next_y_vals.push_back(previous_path_y[i]);
+            }
+
+            for (int i = 1; i < vehicle.xs.size(); ++i) {
+              next_x_vals.push_back(vehicle.xs[i]);
+              next_y_vals.push_back(vehicle.ys[i]);
+            }
 
 
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
