@@ -44,12 +44,12 @@ void plot_debug(Planner planner, Highway highway) {
   vector<double> ddist, dvel, infl_x, infl_y;
   vector<double> xpts1, ypts1;
 
-  Vehicle vehicle(909.48, 1128.67, car_s, car_d,  0, 20);
-  for (int i=0; i<50*240; i++) {
-    vehicle.step(21, 0.02, planner);
-  }
+  Vehicle vehicle;
+  vehicle.init(909.48, 1128.67, car_s, car_d,  0, 0);
+  vehicle.move(50*3, 0.02, 20, 10, 10, planner);
+
   plt::subplot(4,1,1);
-  highway.plot_highway(car);
+  highway.plot_highway(car, 3, 1);
   plt::plot(vehicle.xs, vehicle.ys, "r.");
   plt::subplot(4,1,2);
   plt::plot(vehicle.vs);
@@ -114,10 +114,11 @@ int main() {
   Highway highway = Highway(map_waypoints_x, map_waypoints_y, map_waypoints_s, map_waypoints_dx, map_waypoints_dy);
 
   //plot_debug(planner, highway);
-  //car_debug(planner, highway);
+
+  Vehicle vehicle;
 
   int step = 0;
-  h.onMessage([&step,&highway,&planner,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&vehicle,&highway,&planner,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -160,53 +161,12 @@ int main() {
           	vector<double> next_y_vals;
 
 
-//          	// Straight path
-//          	double inc = 0.25;
-//          	for (int i = 0; i < 50; ++i) {
-//              next_x_vals.push_back(car_x + i*inc*cos(car_yaw));
-//              next_y_vals.push_back(car_y + i*inc*sin(car_yaw));
-//            }
+            int nsteps = 5000 - previous_path_x.size();
+            double time = 0.02, speed_limit = 49.5, acc_limit = 10, jerk_limit = 1000;
 
-//            // Circular path
-//            double inc = 0.5, angle = deg2rad(car_yaw);
-//            for (int i = 0; i < 50; ++i) {
-//              car_x += inc*cos(angle + (i+1)*deg2rad(0.2));
-//              car_y += inc*sin(angle + (i+1)*deg2rad(0.2));
-//              next_x_vals.push_back(car_x);
-//              next_y_vals.push_back(car_y);
-//            }
-
-//          	double speed_limit = 49;
-//          	if (car.speed < speed_limit) {
-//          	  car.speed += 5;
-//          	}
-//            if (car.speed > speed_limit) {
-//              car.speed -= 5;
-//            }
-//
-
-//            double time = 0.02, speed_limit = 30, acc_limit = 10;
-//            Car car = Car(car_x, car_y, car_s, car_d, car_yaw, speed_limit);
-//            double d = 6;
-//            for (int i = 0; i < 500; ++i) {
-//              //car.adjust_speed(speed_limit, acc_limit, time);
-//              car.step(time);
-//              vector<double> xy = planner.getXY(car.s, d);
-//              next_x_vals.push_back(xy[0]);
-//              next_y_vals.push_back(xy[1]);
-//            }
-
-
-          	Vehicle vehicle(car_x, car_y, end_path_s, end_path_d, car_yaw, 20);
-          	for (int i = 0; i < 2000-previous_path_x.size(); ++i) {
-              vehicle.step(20, 0.02, planner);
-            }
-          	//vehicle.print_stats();
-
-          	for (int i = 0; i < previous_path_x.size(); ++i) {
-              next_x_vals.push_back(previous_path_x[i]);
-              next_y_vals.push_back(previous_path_y[i]);
-            }
+            if (!vehicle.initialized)
+              vehicle.init(car_x, car_y, car_s, car_d, car_yaw, car_speed);
+            vehicle.move(nsteps, time, speed_limit, acc_limit, jerk_limit, planner);
 
             for (int i = 1; i < vehicle.xs.size(); ++i) {
               next_x_vals.push_back(vehicle.xs[i]);

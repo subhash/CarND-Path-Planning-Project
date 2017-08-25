@@ -185,14 +185,21 @@ class Vehicle {
   vector<double> xs, ys, ss, vs, as, js, verr_xs, verr_ys;
   const double conv = 0.44703;
   const double speed_limit = 50*conv, acc_limit = 10;
+  int iter = 0;
+  bool initialized = false;
 
-  Vehicle(double x, double y, double s, double d, double yaw, double speed) {
+  Vehicle() {
+    this->initialized = false;
+  }
+
+  void init(double x, double y, double s, double d, double yaw, double speed) {
+    this->initialized = true;
     this->x = x;
     this->y = y;
     this->s = s;
     this->d = d;
     this->yaw = yaw;
-    this->v = speed;
+    this->v = speed*conv;
     this->a = 0;
     this->j = 0;
 
@@ -201,13 +208,28 @@ class Vehicle {
     this->ss.push_back(s);
   }
 
-//  void adjust_speed(double speed_limit, double acc_limit, double time) {
-//    double max_speed = speed_limit * conv;
-//    double max_speed_inc = acc_limit * time;
-//    double inc = max_speed - this->v;
-//    if (inc > max_speed_inc) inc = max_speed_inc;
-//    this->v += inc;
-//  }
+  void trim(int n) {
+    if (n <= this->ss.size()) {
+     this->ss.erase(this->ss.begin(), this->ss.begin()+n);
+     this->xs.erase(this->xs.begin(), this->xs.begin()+n);
+     this->ys.erase(this->ys.begin(), this->ys.begin()+n);
+    }
+  }
+
+  void adjust_velocity(double time, double speed_limit, double acc_limit, double jerk_limit) {
+    //cout <<  "v=" <<this->v << endl;
+    double max_j = jerk_limit * time;
+    double max_a = acc_limit;
+    double max_a_inc = max_j * time;
+    double a_inc = max_a - this->a;
+    if (a_inc > max_a_inc) a_inc = max_a_inc;
+    if (a_inc > 0) this->a += a_inc;
+    double max_v = speed_limit * conv;
+    double max_v_inc = this->a * time;
+    double v_inc = max_v - this->v;
+    if (v_inc > max_v_inc) v_inc = max_v_inc;
+    if (v_inc > 0) this->v += v_inc;
+  }
 
   double velocity(double x, double y, double time) {
     double dist = sqrt(pow(x-this->x, 2) + pow(y-this->y, 2));
@@ -215,20 +237,30 @@ class Vehicle {
     return v;
   }
 
-  void step(double speed, double time, Planner planner) {
-    double s_diff = speed * time;
+
+  void move(int steps, double time, double speed_limit, double acc_limit, double jerk_limit, Planner planner) {
+    this->trim(steps);
+    for (int i = 0; i < steps; ++i) {
+      this->adjust_velocity(time, speed_limit, acc_limit, jerk_limit);
+      this->step(time, planner);
+    }
+  }
+
+  void step(double time, Planner planner) {
+    this->iter++;
+    double s_diff = this->v * time;
     vector<double> xy = planner.getXY(this->s + s_diff, 6);
     double v = velocity(xy[0], xy[1], time);
-    if (v > speed_limit) {
-//      cout << "Correcting speed "<< v <<" against "<< speed << " with "<< s_diff << endl;
+//    while (v > speed_limit) {
+//      cout << "Correcting speed "<< v <<" against  with "<< s_diff << endl;
 //      v = speed_limit;
 //      s_diff = v * time;
 //      xy = planner.getXY(this->s + s_diff, 6);
 //      v = velocity(xy[0], xy[1], time);
-      //cout << "Violated speed at " << xy[0] << ", "<< xy[1] << endl;
-      this->verr_xs.push_back(xy[0]);
-      this->verr_ys.push_back(xy[1]);
-    }
+//      //cout << "Violated speed at " << xy[0] << ", "<< xy[1] << endl;
+//      this->verr_xs.push_back(xy[0]);
+//      this->verr_ys.push_back(xy[1]);
+//    }
     double x = xy[0], y = xy[1];
     double a = (v - this->v)/time;
     double j = (a - this->a)/time;
@@ -236,16 +268,16 @@ class Vehicle {
     this->s += s_diff;
     this->x = x;
     this->y = y;
-    this->v = v;
-    this->a = a;
-    this->j = j;
+    //this->v = v;
+    if(this->iter > 1) this->a = a;
+    if(this->iter > 2) this->j = j;
 
     this->xs.push_back(x);
     this->ys.push_back(y);
     this->ss.push_back(s);
     this->vs.push_back(v);
-    this->as.push_back(a);
-    this->js.push_back(j);
+    if(this->iter > 1) this->as.push_back(a);
+    if(this->iter > 2) this->js.push_back(j);
   }
 
   void print_stats() {
