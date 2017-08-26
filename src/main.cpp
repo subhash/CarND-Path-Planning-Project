@@ -44,9 +44,9 @@ void plot_debug(Planner planner, Highway highway) {
   vector<double> ddist, dvel, infl_x, infl_y;
   vector<double> xpts1, ypts1;
 
-  Vehicle vehicle;
+  Vehicle vehicle(planner);
   vehicle.init(909.48, 1128.67, car_s, car_d,  0, 0);
-  vehicle.move(50*240, car_d, 0.02, 20, 2, 2, planner);
+  vehicle.move(50*240, car_d, 0.02, 20, 2, 2);
 
   plt::subplot(4,1,1);
   highway.plot_highway(car, 15, 2);
@@ -111,14 +111,18 @@ int main() {
 
   Planner planner(map_waypoints_x, map_waypoints_y, map_waypoints_s, map_waypoints_dx, map_waypoints_dy);
 
+  BehaviourPlanner bp;
+
   Highway highway = Highway(map_waypoints_x, map_waypoints_y, map_waypoints_s, map_waypoints_dx, map_waypoints_dy);
 
   //plot_debug(planner, highway);
 
-  Vehicle vehicle;
+  Vehicle vehicle(planner);
+
+
 
   int step = 0;
-  h.onMessage([&vehicle,&highway,&planner,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&vehicle,&bp,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -160,18 +164,13 @@ int main() {
           	vector<double> next_x_vals;
           	vector<double> next_y_vals;
 
-
-            int nsteps = 100 - previous_path_x.size();
-            const double speed_conv = 0.44703;
-            double time = 0.02, speed_limit = 49.0 * speed_conv, acc_limit = 10, jerk_limit = 10;
-
-            double dest_d = 6;
             if (!vehicle.initialized)
               vehicle.init(car_x, car_y, car_s, car_d, car_yaw, car_speed * speed_conv);
-            if (vehicle.v > 20) {
-              dest_d = 10;
-            }
-            vehicle.move(nsteps, dest_d, time, speed_limit, acc_limit, jerk_limit, planner);
+
+            Behaviour& b = bp.behaviour(vehicle);
+            int nsteps = 100 - previous_path_x.size();
+            b.effect(vehicle, nsteps);
+
 
             for (int i = 1; i < vehicle.xs.size(); ++i) {
               next_x_vals.push_back(vehicle.xs[i]);

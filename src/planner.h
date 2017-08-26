@@ -12,6 +12,8 @@
 
 using namespace std;
 
+const double speed_conv = 0.44703, lane_width = 4.0;
+
 
 // For converting back and forth between radians and degrees.
 constexpr double pi() { return M_PI; }
@@ -185,10 +187,12 @@ class Vehicle {
   vector<double> xs, ys, ss;
   vector<double> vs, as, js;
   vector<double> verr_xs, verr_ys, verr, aerr_xs, aerr_ys, aerr;
+  int lane;
   int iter = 0;
   bool initialized = false;
+  Planner& planner;
 
-  Vehicle() {
+  Vehicle(Planner& p): planner(p) {
     this->initialized = false;
   }
 
@@ -202,6 +206,8 @@ class Vehicle {
     this->v = speed;
     this->a = 0;
     this->j = 0;
+
+    this-> lane = int(d/lane_width);
 
     this->xs.push_back(x);
     this->ys.push_back(y);
@@ -240,11 +246,11 @@ class Vehicle {
   }
 
 
-  void move(int steps, double dest_d, double time, double speed_limit, double acc_limit, double jerk_limit, Planner planner) {
+  void move(int steps, double dest_d, double time, double speed_limit, double acc_limit, double jerk_limit) {
     this->trim(steps);
     for (int i = 0; i < steps; ++i) {
       double v = this->adjust_velocity(time, speed_limit, acc_limit, jerk_limit);
-      this->step(time, dest_d, v, speed_limit, acc_limit, planner);
+      this->step(time, dest_d, v, speed_limit, acc_limit, this->planner);
     }
   }
 
@@ -292,6 +298,47 @@ class Vehicle {
   }
 };
 
+
+class Behaviour {
+
+ protected:
+  const double time = 0.02, speed_limit = 49.0 * speed_conv, acc_limit = 10, jerk_limit = 10;
+
+ public:
+  virtual void effect(Vehicle& vehicle, int nsteps) {
+    double dest_d = vehicle.d;
+    cout << "Keep lane "<< vehicle.v << ", "<< vehicle.d << endl;
+    vehicle.move(nsteps, dest_d, time, speed_limit, acc_limit, jerk_limit);
+  }
+
+};
+
+class LeftChangeBehaviour: public Behaviour {
+ public:
+  virtual void effect(Vehicle& vehicle, int nsteps) override {
+    double dest_d = (vehicle.lane - 1)*lane_width + 2;
+    cout << "Change lane "<< vehicle.lane << ", "<< vehicle.d << ","<< dest_d << ", " << (vehicle.d == dest_d) << endl;
+    vehicle.move(nsteps, dest_d, time, speed_limit, acc_limit, jerk_limit);
+    if (fabs(vehicle.d - dest_d) < 0.0001){
+      vehicle.lane -= 1;
+      cout << "Did change lane to " << vehicle.lane << endl;
+    }
+  }
+};
+
+class BehaviourPlanner {
+ private:
+  Behaviour keepLane;
+  LeftChangeBehaviour changeLane;
+ public:
+  Behaviour& behaviour(Vehicle& vehicle) {
+    if (vehicle.v > 10 && vehicle.lane != 0) {
+      cout << "Changing lane "<< vehicle.lane << ", "<< vehicle.d << endl;
+      return changeLane;
+    }
+    return keepLane;
+  }
+};
 
 
 #endif /* PLANNER_H_ */
