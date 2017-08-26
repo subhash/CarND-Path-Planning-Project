@@ -240,28 +240,25 @@ class Vehicle {
   }
 
 
-  void move(int steps, double time, double speed_limit, double acc_limit, double jerk_limit, Planner planner) {
+  void move(int steps, double dest_d, double time, double speed_limit, double acc_limit, double jerk_limit, Planner planner) {
     this->trim(steps);
     for (int i = 0; i < steps; ++i) {
       double v = this->adjust_velocity(time, speed_limit, acc_limit, jerk_limit);
-      this->step(time, v, speed_limit, acc_limit, planner);
+      this->step(time, dest_d, v, speed_limit, acc_limit, planner);
     }
   }
 
-  void step(double time, double v, double speed_limit, double acc_limit, Planner planner) {
+  void step(double time, double d, double v, double speed_limit, double acc_limit, Planner planner) {
     this->iter++;
     double s_diff = v * time;
-    vector<double> xy = planner.getXY(this->s + s_diff, 6);
+    double d_diff = (d - this->d) * time * 0.5;
+    vector<double> xy = planner.getXY(this->s + s_diff, this->d + d_diff);
     double corr_v = velocity(xy[0], xy[1], time);
 
     if (corr_v > speed_limit) {
       this->verr_xs.push_back(xy[0]);
       this->verr_ys.push_back(xy[1]);
       this->verr.push_back(corr_v-speed_limit);
-//      v -= 0.1;
-//      s_diff = v * time;
-//      xy = planner.getXY(this->s + s_diff, 6);
-//      v = velocity(xy[0], xy[1], time);
     }
 
     double a = (v - this->v)/time;
@@ -270,6 +267,7 @@ class Vehicle {
     double x = xy[0], y = xy[1];
 
     this->s += s_diff;
+    this->d += d_diff;
     this->x = x;
     this->y = y;
     this->v = v;

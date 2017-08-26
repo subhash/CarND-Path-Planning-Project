@@ -46,7 +46,7 @@ void plot_debug(Planner planner, Highway highway) {
 
   Vehicle vehicle;
   vehicle.init(909.48, 1128.67, car_s, car_d,  0, 0);
-  vehicle.move(50*240, 0.02, 20, 10, 10, planner);
+  vehicle.move(50*240, car_d, 0.02, 20, 2, 2, planner);
 
   plt::subplot(4,1,1);
   highway.plot_highway(car, 15, 2);
@@ -161,13 +161,17 @@ int main() {
           	vector<double> next_y_vals;
 
 
-            int nsteps = 5000 - previous_path_x.size();
+            int nsteps = 100 - previous_path_x.size();
             const double speed_conv = 0.44703;
             double time = 0.02, speed_limit = 49.0 * speed_conv, acc_limit = 10, jerk_limit = 10;
 
+            double dest_d = 6;
             if (!vehicle.initialized)
               vehicle.init(car_x, car_y, car_s, car_d, car_yaw, car_speed * speed_conv);
-            vehicle.move(nsteps, time, speed_limit, acc_limit, jerk_limit, planner);
+            if (vehicle.v > 20) {
+              dest_d = 10;
+            }
+            vehicle.move(nsteps, dest_d, time, speed_limit, acc_limit, jerk_limit, planner);
 
             for (int i = 1; i < vehicle.xs.size(); ++i) {
               next_x_vals.push_back(vehicle.xs[i]);
