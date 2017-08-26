@@ -113,6 +113,8 @@ int main() {
 
   BehaviourPlanner bp;
 
+  Environment env;
+
   Highway highway = Highway(map_waypoints_x, map_waypoints_y, map_waypoints_s, map_waypoints_dx, map_waypoints_dy);
 
   //plot_debug(planner, highway);
@@ -122,7 +124,7 @@ int main() {
 
 
   int step = 0;
-  h.onMessage([&vehicle,&bp,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&vehicle,&bp,&env,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -164,12 +166,20 @@ int main() {
           	vector<double> next_x_vals;
           	vector<double> next_y_vals;
 
+          	for (int i = 0; i < sensor_fusion.size(); ++i) {
+          	  auto data = sensor_fusion[i];
+              env.update(data[0], data[1], data[2], data[3], data[4], data[5], data[6]);
+            }
+
+          	//cout << "Speed - " << env.lane_speed(0, car_s) << ", " << env.lane_speed(1, car_s) << ", "<< env.lane_speed(2, car_s) << endl;
+
+
             if (!vehicle.initialized)
               vehicle.init(car_x, car_y, car_s, car_d, car_yaw, car_speed * speed_conv);
 
             Behaviour& b = bp.behaviour(vehicle);
             int nsteps = 100 - previous_path_x.size();
-            b.effect(vehicle, nsteps);
+            b.effect(vehicle, env, nsteps);
 
 
             for (int i = 1; i < vehicle.xs.size(); ++i) {

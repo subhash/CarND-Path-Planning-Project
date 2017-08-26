@@ -1,4 +1,5 @@
 #include "spline.h"
+#include <map>
 
 /*
  * planner.h
@@ -299,46 +300,131 @@ class Vehicle {
 };
 
 
+
+class Obstacle {
+ public:
+  int id;
+  double x, y, vx, vy, s, d;
+
+  void update(int id, double x, double y, double vx, double vy, double s, double d) {
+    this->id = id;
+    this->x = x;
+    this->y = y;
+    this->vx = vx;
+    this->vy = vy;
+    this->s = s;
+    this->d = d;
+  }
+
+  double speed() {
+    return sqrt(pow(this->vx, 2) + pow(this->vy, 2));
+  }
+
+};
+
+
+class Environment {
+
+ public:
+
+  map<int, Obstacle> obstacles;
+
+  void update(int id, double x, double y, double vx, double vy, double s, double d) {
+    obstacles[id].update(id, x, y, vx, vy, s, d);
+  }
+
+  int leading_obstacle(int lane, double s) {
+    double min_dist = std::numeric_limits<double>::max();
+    int min_id = -1;
+    for (auto const& el : obstacles) {
+      Obstacle o = el.second;
+      double dist = o.s - s;
+      if (dist > 0 && dist < min_dist && o.d > lane * lane_width && o.d < (lane+1)*lane_width) {
+        min_dist = dist;
+        min_id = el.first;
+      }
+    }
+    return min_id;
+  }
+
+  double leading_distance(int lane, double s) {
+    int id = leading_obstacle(lane, s);
+    if (id == -1) {
+      return std::numeric_limits<double>::max();
+    } else {
+      return obstacles[id].s - s;
+    }
+  }
+
+  double lane_speed(int lane, double s) {
+    int id = leading_obstacle(lane, s);
+    if (id == -1) {
+      return 0;
+    } else {
+      return obstacles[id].speed();
+    }
+  }
+
+};
+
+
+
 class Behaviour {
 
  protected:
   const double time = 0.02, speed_limit = 49.0 * speed_conv, acc_limit = 10, jerk_limit = 10;
 
  public:
-  virtual void effect(Vehicle& vehicle, int nsteps) {
+  virtual void effect(Vehicle& vehicle, Environment& env, int nsteps) {
     double dest_d = vehicle.d;
-    cout << "Keep lane "<< vehicle.v << ", "<< vehicle.d << endl;
+//    const double lane_speed = env.lane_speed(vehicle.lane, vehicle.s);
+//    if (lane_speed < speed_limit) {
+//      cout << "Limiting speed to "<< min(speed_limit, lane_speed) << endl;
+//    }
+//    vehicle.move(nsteps, dest_d, time, min(speed_limit, lane_speed), acc_limit, jerk_limit);
     vehicle.move(nsteps, dest_d, time, speed_limit, acc_limit, jerk_limit);
   }
+
+  virtual ~Behaviour() {}
 
 };
 
 class LeftChangeBehaviour: public Behaviour {
  public:
-  virtual void effect(Vehicle& vehicle, int nsteps) override {
+  virtual void effect(Vehicle& vehicle, Environment& env, int nsteps) override {
     double dest_d = (vehicle.lane - 1)*lane_width + 2;
-    cout << "Change lane "<< vehicle.lane << ", "<< vehicle.d << ","<< dest_d << ", " << (vehicle.d == dest_d) << endl;
     vehicle.move(nsteps, dest_d, time, speed_limit, acc_limit, jerk_limit);
     if (fabs(vehicle.d - dest_d) < 0.0001){
       vehicle.lane -= 1;
-      cout << "Did change lane to " << vehicle.lane << endl;
     }
   }
 };
 
+class SlowingDownBehaviour: public Behaviour {
+ public:
+  virtual void effect(Vehicle& vehicle, Environment& env, int nsteps) override {
+    vehicle.move(nsteps, vehicle.d, time, 15, acc_limit, jerk_limit);
+  }
+};
+
+
 class BehaviourPlanner {
+
  private:
   Behaviour keepLane;
   LeftChangeBehaviour changeLane;
+  SlowingDownBehaviour slowDown;
+
  public:
   Behaviour& behaviour(Vehicle& vehicle) {
     if (vehicle.v > 10 && vehicle.lane != 0) {
-      cout << "Changing lane "<< vehicle.lane << ", "<< vehicle.d << endl;
+      //cout << "Slow down at "<< vehicle.v << " and " << vehicle.a <<endl;
       return changeLane;
     }
     return keepLane;
   }
 };
+
 
 
 #endif /* PLANNER_H_ */
