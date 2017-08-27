@@ -177,8 +177,9 @@ int main() {
             if (!vehicle.initialized)
               vehicle.init(car_x, car_y, car_s, car_d, car_yaw, car_speed * speed_conv);
 
-            Behaviour& b = bp.behaviour(vehicle);
-            int nsteps = 100 - previous_path_x.size();
+            Behaviour& b = bp.behaviour(vehicle, env);
+            int nsteps = 50 - previous_path_x.size();
+            //cout << "nsteps - "<< nsteps << endl;
             b.effect(vehicle, env, nsteps);
 
 
