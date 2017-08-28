@@ -224,7 +224,7 @@ class Vehicle {
     return int(d/lane_width);
   }
 
-  double inc_velocity(double time, double speed_limit, double acc_limit, double jerk_limit) {
+  double inc_velocity(double time, double v_desired, double acc_limit, double jerk_limit) {
 //    double max_j = jerk_limit * time;
 //
 //    double a = this->a;
@@ -245,13 +245,13 @@ class Vehicle {
     if (fabs(a + a_diff) < fabs(acc_limit)) a += a_diff;
     double v = this->v;
     double v_diff = a*time;
-    if (v + v_diff < speed_limit) v += v_diff;
+    if (v + v_diff < v_desired) v += v_diff;
 
     //cout << "inc v - "<< this->iter<< "  " << v << " adiff - "<< a_diff << " a - "<< a << " bool - "<< (fabs(a + a_diff) < fabs(acc_limit)) << " vdiff " << v_diff << " speed_limit " << speed_limit <<  endl;
     return v;
   }
 
-  double dec_velocity(double time, double speed_limit, double acc_limit, double jerk_limit) {
+  double dec_velocity(double time, double v_desired, double acc_limit, double jerk_limit) {
     acc_limit *= -1;
     jerk_limit *= -1;
 
@@ -261,7 +261,7 @@ class Vehicle {
     double v = this->v;
     double v_diff = a*time;
     //v_diff = -0.1;
-    if (v + v_diff > speed_limit) v += v_diff;
+    if (v + v_diff > v_desired) v += v_diff;
 
     //cout << "dec v - "<< v << " adiff - "<< a_diff << " a - "<< a << " bool - "<< (fabs(a + a_diff) < fabs(acc_limit)) << " vdiff " << v_diff << " speed_limit " << speed_limit <<  endl;
     return v;
@@ -360,12 +360,38 @@ class Obstacle {
 
 class Environment {
 
+ private:
+  const double time = 0.02, speed_limit = 49.0 * speed_conv, acc_limit = 2, jerk_limit = 2;
+
  public:
 
   map<int, Obstacle> obstacles;
 
   void update(int id, double x, double y, double vx, double vy, double s, double d) {
     obstacles[id].update(id, x, y, vx, vy, s, d);
+  }
+
+  int closest_obstacle(int lane, double s) {
+    double min_dist = std::numeric_limits<double>::max();
+    int min_id = -1;
+    for (auto const& el : obstacles) {
+      Obstacle o = el.second;
+      double dist = fabs(o.s - s);
+      if (dist < min_dist && o.d > lane * lane_width && o.d < (lane+1)*lane_width) {
+        min_dist = dist;
+        min_id = el.first;
+      }
+    }
+    return min_id;
+  }
+
+  bool collision_possible(int lane, double s, double d) {
+    int oid = closest_obstacle(lane, s);
+    if (oid != -1) {
+      Obstacle o = obstacles[oid];
+      return fabs(o.s - s) < 10 && fabs(o.d - d) < lane_width;
+    }
+    return false;
   }
 
   int leading_obstacle(int lane, double s) {
@@ -394,7 +420,7 @@ class Environment {
   double lane_speed(int lane, double s) {
     int id = leading_obstacle(lane, s);
     if (id == -1) {
-      return -1;
+      return speed_limit;
     } else {
       return obstacles[id].speed();
     }
@@ -402,12 +428,13 @@ class Environment {
 
 };
 
-
+class BehaviourPlanner;
 
 class Behaviour {
 
  protected:
-  const double time = 0.02, speed_limit = 49.0 * speed_conv, acc_limit = 2, jerk_limit = 2;
+  double time = 0.02, speed_limit = 49.0 * speed_conv, acc_limit = 2, jerk_limit = 2;
+  BehaviourPlanner& behaviour_planner;
 
   double decide_speed(Vehicle& vehicle, Environment& env, double speed_limit) {
     double desired_speed = speed_limit;
@@ -426,33 +453,97 @@ class Behaviour {
 
  public:
   string name;
-  Behaviour(string name): name(name) {}
+  Behaviour(string name, BehaviourPlanner& bp): name(name), behaviour_planner(bp) {}
   virtual void effect(Vehicle& vehicle, Environment& env, int nsteps) { }
-  virtual Behaviour* next_action(Vehicle& vehicle, Environment& env) { return this; }
+  virtual Behaviour& next_action(Vehicle& vehicle, Environment& env) { return *this; }
+  virtual vector<std::reference_wrapper<Behaviour>> next_actions(Vehicle& vehicle, Environment& env);
+  virtual double cost(Vehicle& vehicle, Environment& env) {
+    return 0;
+  }
   virtual ~Behaviour() {}
 };
 
 
 class KeepLane: public Behaviour {
  public:
-  KeepLane(): Behaviour("KL") {};
+  KeepLane(BehaviourPlanner& bp): Behaviour("KL", bp) {};
   virtual void effect(Vehicle& vehicle, Environment& env, int nsteps) override;
-  virtual Behaviour* next_action(Vehicle& vehicle, Environment& env) override;
+  virtual Behaviour& next_action(Vehicle& vehicle, Environment& env) override;
+  virtual double cost(Vehicle& vehicle, Environment& env) override {
+    int lane = vehicle.lane(), llane = lane-1, rlane = lane+1;
+    double s = vehicle.s, d = vehicle.d;
+    double speed_cost = env.lane_speed(vehicle.lane(), vehicle.s) < speed_limit;
+    double safety_cost = (llane >= 0) && env.collision_possible(llane, s, d) +
+        (rlane <= 2) && env.collision_possible(rlane, s, d);
+    return speed_cost + safety_cost;
+  }
 };
 
 class LeftChange: public Behaviour {
-  int dest_d;
+  int dest_lane;
  public:
-  LeftChange(int dest_lane): Behaviour("LCL"), dest_d(dest_lane*lane_width + 2) {}
+  LeftChange(int dest_lane, BehaviourPlanner& bp): Behaviour("LCL", bp), dest_lane(dest_lane) {}
+  void set_lane(int dest_lane) { this->dest_lane = dest_lane; }
   virtual void effect(Vehicle& vehicle, Environment& env, int nsteps) override;
-  virtual Behaviour* next_action(Vehicle& vehicle, Environment& env) override;
+  virtual Behaviour& next_action(Vehicle& vehicle, Environment& env) override;
+  virtual double cost(Vehicle& vehicle, Environment& env) override {
+    double s = vehicle.s, d = vehicle.d;
+    double speed_cost = env.lane_speed(dest_lane, vehicle.s) < speed_limit;
+    double safety_cost = env.collision_possible(dest_lane, s, d);
+    return speed_cost + safety_cost;
+  }
 };
 
 class SlowDown: public Behaviour {
  public:
-  SlowDown(string name): Behaviour("SD") {};
+  SlowDown(BehaviourPlanner& bp): Behaviour("SD", bp) {};
   virtual void effect(Vehicle& vehicle, Environment& env, int nsteps) override;
+  virtual double cost(Vehicle& vehicle, Environment& env) override {
+    double speed_cost = 1;
+    return speed_cost;
+  }
 };
+
+
+class BehaviourPlanner {
+
+ private:
+  KeepLane kl;
+  SlowDown sd;
+  LeftChange lc;
+  Behaviour* last_action = &kl;
+
+ public:
+  BehaviourPlanner(): kl(*this), sd(*this), lc(0, *this) {
+  }
+
+  Behaviour& keepLane() {
+    return this->kl;
+  }
+
+  Behaviour& leftChange(int lane) {
+    this->lc.set_lane(lane);
+    return this->lc;
+  }
+
+  Behaviour& slowDown() {
+    return this->sd;
+  }
+
+  Behaviour& behaviour(Vehicle& vehicle, Environment& env) {
+    if (vehicle.iter % 50) cout << "action - " << last_action->name << endl;
+    //last_action = &last_action->next_action(vehicle, env);
+    last_action = &last_action->next_actions(vehicle, env)[0].get();
+    return *last_action;
+  }
+};
+
+
+vector<std::reference_wrapper<Behaviour>> Behaviour::next_actions(Vehicle& vehicle, Environment& env){
+  vector<std::reference_wrapper<Behaviour>> vec;
+  vec.push_back( this->next_action(vehicle, env) );
+  return vec;
+}
 
 void KeepLane::effect(Vehicle& vehicle, Environment& env, int nsteps) {
   double dest_d = vehicle.d;
@@ -460,6 +551,7 @@ void KeepLane::effect(Vehicle& vehicle, Environment& env, int nsteps) {
 }
 
 void LeftChange::effect(Vehicle& vehicle, Environment& env, int nsteps) {
+  double dest_d = dest_lane*lane_width + 2;
   vehicle.move(nsteps, dest_d, time, decide_speed(vehicle, env, speed_limit), acc_limit, jerk_limit);
 }
 
@@ -467,34 +559,29 @@ void SlowDown::effect(Vehicle& vehicle, Environment& env, int nsteps) {
   vehicle.move(nsteps, vehicle.d, time, 5, acc_limit, jerk_limit);
 }
 
-Behaviour* KeepLane::next_action(Vehicle& vehicle, Environment& env) {
+Behaviour& KeepLane::next_action(Vehicle& vehicle, Environment& env) {
+//  vector<Behaviour&> actions = { behaviour_planner.keepLane() };
+//  if (vehicle.lane() > 0) {
+//    Behaviour& lc = behaviour_planner.leftChange(vehicle.lane() - 1);
+//    actions.push_back(lc);
+//  }
+//  Behaviour& b = *min_element(actions.begin(), actions.end(), [&vehicle, &env](const Behaviour& a, const Behaviour& b) {
+//    return true;
+//  });
+//  return actions[0];
   if (vehicle.iter > 800) {
-    return new LeftChange(vehicle.lane()-1);
+    return behaviour_planner.leftChange(0);
   }
-  return this;
+  return behaviour_planner.keepLane();
 }
 
-Behaviour* LeftChange::next_action(Vehicle& vehicle, Environment& env) {
-  if (fabs(vehicle.d - dest_d) < 0.0001){
-    return new KeepLane();
-  }
-  return this;
+Behaviour& LeftChange::next_action(Vehicle& vehicle, Environment& env) {
+  double dest_d = vehicle.d;
+//  if (fabs(vehicle.d - dest_d) < 0.0001){
+//    return KeepLane();
+//  }
+  return *this;
 }
-
-
-class BehaviourPlanner {
-
- private:
-  Behaviour* last_action = new KeepLane();
-
- public:
-  Behaviour& behaviour(Vehicle& vehicle, Environment& env) {
-    if (vehicle.iter % 50) cout << "action - " << last_action->name << endl;
-    last_action = last_action->next_action(vehicle, env);
-    return *last_action;
-  }
-};
-
 
 
 #endif /* PLANNER_H_ */
