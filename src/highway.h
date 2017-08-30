@@ -136,17 +136,17 @@ class Highway {
     return ::getXY(s, d, this->ss, this->xs, this->ys);
   }
 
-  void plot_highway(Car car, int section = 10000, int width = 50) {
+  void plot_highway(Car car, int from = 0, int to = 10000, int width = 50) {
     plt::plot({car.x}, {car.y}, "r*");
-    this->plot_highway(section, width);
+    this->plot_highway(from, to, width);
   }
 
-  void plot_highway(int section = 10000, int width = 50) {
-    if (section > dxs.size()) {
+  void plot_highway(int from = 0, int to = 10000, int width = 50) {
+    if (to > dxs.size()) {
       plt::plot(xs, ys);
-      section = dxs.size();
+      to = dxs.size();
     }
-    for (int i = 0; i < section; ++i) {
+    for (int i = from; i < to; ++i) {
       plt::plot({xs[i], xs[i]+width*dxs[i]}, {ys[i], ys[i]+width*dys[i]}, "g");
       plt::plot({xs[i]+width*dxs[i]}, {ys[i]+width*dys[i]}, "g.");
     }

@@ -163,10 +163,11 @@ class Planner {
   int size;
   tk::spline WP_spline_x, WP_spline_y, WP_spline_dx, WP_spline_dy, WP_spline_theta;
   std::vector<tk::spline> lane_spline_x, lane_spline_y, lane_spline_dx, lane_spline_dy;
+  std::vector<tk::spline> lane_spline_s, lane_spline_rev_s;
 
 
   Planner(vector<double> xs, vector<double> ys, vector<double> ss, vector<double> dxs, vector<double> dys):
-    lane_spline_x(3), lane_spline_y(3), lane_spline_dx(3), lane_spline_dy(3) {
+    lane_spline_x(3), lane_spline_y(3), lane_spline_dx(3), lane_spline_dy(3), lane_spline_s(3), lane_spline_rev_s(3) {
     this->xs = xs;
     this->ys = ys;
     this->ss = ss;
@@ -217,22 +218,34 @@ class Planner {
     lane_spline_y[lane].set_points(ss1, ys1);
     lane_spline_dx[lane].set_points(ss1, dxs1);
     lane_spline_dy[lane].set_points(ss1, dys1);
+
+    lane_spline_s[lane].set_points(ss1, this->ss);
+    lane_spline_rev_s[lane].set_points(this->ss, ss1);
   }
 
 
+//    vector<double> getXY(double s, double d) {
+//      int lane = int(d/lane_width);
+//      double wp_s = lane_spline_s[lane](s);
+//      double x = WP_spline_x(wp_s), y = WP_spline_y(wp_s);
+//      double dx = WP_spline_dx(wp_s) * d, dy = WP_spline_dy(wp_s) * d;
+//      return { x+dx, y+dy };
+//    }
+
+//  vector<double> getXY(double s, double d) {
+//    int lane = int(d/lane_width);
+//    double x = lane_spline_x[lane](s), y = lane_spline_y[lane](s);
+//    double dx = lane_spline_dx[lane](s) * d, dy = lane_spline_dy[lane](s) * d;
+//    return { x+dx, y+dy };
+//  }
 
   vector<double> getXY(double s, double d) {
-    int lane = int(d/lane_width);
-    double x = lane_spline_x[lane](s), y = lane_spline_y[lane](s);
-    double dx = lane_spline_dx[lane](s) * d, dy = lane_spline_dy[lane](s) * d;
+    double x = WP_spline_x(s), y = WP_spline_y(s);
+    double dx = WP_spline_dx(s) * d, dy = WP_spline_dy(s) * d;
     return { x+dx, y+dy };
   }
 
-//  vector<double> getXY(double s, double d) {
-//    double x = WP_spline_x(s), y = WP_spline_y(s);
-//    double dx = WP_spline_dx(s) * d, dy = WP_spline_dy(s) * d;
-//    return { x+dx, y+dy };
-//  }
+
 //
 //  double theta(double s) {
 //    double dx = WP_spline_dx(s), dy = WP_spline_dy(s);
@@ -302,11 +315,12 @@ class Traj {
 
   vector<double> spoly, dpoly;
   double duration;
+  int ref_lane;
 
 public:
   vector<double> s_vec, d_vec;
 
-  Traj(double duration, vector<double> s_vec, vector<double> d_vec){
+  Traj(double duration, vector<double> s_vec, vector<double> d_vec, int ref_lane): ref_lane(ref_lane) {
     this->s_vec = s_vec;
     this->d_vec = d_vec;
     this->duration = duration;
@@ -333,7 +347,8 @@ public:
     for (int i = 0; i < steps; ++i) {
       double s = poly_eval(this->spoly, (i+1) * dt);
       double d = poly_eval(this->dpoly, (i+1) * dt);
-      pts.push_back(make_pair(s, d));
+      double proj_s = p.lane_spline_s[ref_lane](s);
+      pts.push_back(make_pair(proj_s, d));
     }
     return pts;
   }
@@ -390,10 +405,11 @@ class Vehicle {
     return make_pair(v, a);
   }
 
-  void move_to(double s, double d, double dt, Planner planner) {
+  void move_to(double proj_s, double d, double dt, Planner planner) {
     this->iter++;
 
-    vector<double> xy = planner.getXY(s, d);
+    vector<double> xy = planner.getXY(proj_s, d);
+    double s = planner.lane_spline_rev_s[this->lane()](proj_s);
 
     double corr_v, corr_a;
     tie(corr_v, corr_a) = velocity(xy[0], xy[1], dt);
@@ -647,7 +663,6 @@ class Behaviour {
 
  protected:
   double time = 0.02, speed_limit = 49.0 * speed_conv, acc_limit = 2, jerk_limit = 2;
-  BehaviourPlanner& behaviour_planner;
 
   double decide_speed(Vehicle& vehicle, Environment& env, double speed_limit) {
     return env.lane_speed(vehicle, vehicle.lane());
@@ -655,12 +670,17 @@ class Behaviour {
 
  public:
   string name;
-  Behaviour(string name, BehaviourPlanner& bp): name(name), behaviour_planner(bp) {}
+  Behaviour(string name): name(name) {}
 //  virtual void effect(Vehicle& vehicle, Environment& env, int nsteps) { }
 //  virtual vector<std::reference_wrapper<Behaviour>> next_actions(Vehicle& vehicle, Environment& env) { return { *this }; }
 //  virtual double cost(Vehicle& vehicle, Environment& env, bool debug = false) = 0;
+// virtual Behaviour& next_behaviour(Vehicle& vehicle, Environment& env, Planner& planner);
   virtual Traj convolute(Vehicle& vehicle, Environment& env, Planner& p) {
-    return Traj(0, vector<double>(), vector<double>());
+    cout << "Base convolute "<< endl;
+    return Traj(0, vector<double>(), vector<double>(), 0);
+  }
+  virtual vector<std::reference_wrapper<Behaviour>> next_actions(Vehicle& vehicle, Environment& env, BehaviourPlanner& bp) {
+    return {};
   }
   virtual ~Behaviour() {}
 };
@@ -668,9 +688,9 @@ class Behaviour {
 
 class KeepLane: public Behaviour {
  public:
-  KeepLane(BehaviourPlanner& bp, string name): Behaviour(name, bp) {};
+  KeepLane(): Behaviour("KL") {};
 //  virtual void effect(Vehicle& vehicle, Environment& env, int nsteps) override;
-//  virtual vector<std::reference_wrapper<Behaviour>> next_actions(Vehicle& vehicle, Environment& env) override;
+//
 //
 //  virtual double cost(Vehicle& vehicle, Environment& env, bool debug = false) override {
 //    if(debug) cout << this->name << ": ";
@@ -684,7 +704,9 @@ class KeepLane: public Behaviour {
 //    return 2*speed_cost + 10*safety_cost;
 //  }
 
+
   virtual Traj convolute(Vehicle& vehicle, Environment& env, Planner& planner) override {
+    cout << "KL convolute "<< endl;
     double tf = 3.0; // sec
     double si = vehicle.s, si_dot = vehicle.v, si_ddot = vehicle.a;
     double sf_dot = speed_limit;
@@ -695,12 +717,15 @@ class KeepLane: public Behaviour {
     double v_ave = 0.5*(vehicle.v + sf_dot);
     double sf = vehicle.s + v_ave*tf;
     double df = vehicle.d;
-    if (vehicle.iter > 2000) df = 10;
+    //if (vehicle.iter > 2000) df = 10;
     vector<double> s_vec = { si, si_dot, si_ddot, sf, sf_dot, 0 };
     vector<double> d_vec = { vehicle.d, 0, 0, df, 0, 0, 0};
-    Traj traj(tf, s_vec, d_vec);
+    Traj traj(tf, s_vec, d_vec, vehicle.lane());
     return traj;
   }
+
+  virtual vector<std::reference_wrapper<Behaviour>> next_actions(Vehicle& vehicle, Environment& env, BehaviourPlanner& bp) override;
+  //virtual Behaviour& next_behaviour(Vehicle& vehicle, Environment& env, Planner& planner) override;
 };
 
 class LaneChange: public Behaviour {
@@ -708,15 +733,37 @@ class LaneChange: public Behaviour {
   vector<double> d_poly;
   int steps = 0;
  public:
-  LaneChange(BehaviourPlanner& bp, string name): Behaviour(name, bp) {}
-//  void set_lane(Vehicle& vehicle, int dest_lane) {
-//    this->dest_lane = dest_lane;
-//    double dest_d = dest_lane*lane_width + 2;
-//    d_poly = make_poly(3, vehicle.d, dest_d);
-//    steps = 0;
-//  }
+  LaneChange(string name, int lane): Behaviour(name), dest_lane(lane) {}
+
+  virtual Traj convolute(Vehicle& vehicle, Environment& env, Planner& planner) override {
+    cout << "LC convolute "<< endl;
+    double tf = 7.0; // sec
+
+    double si = vehicle.s, si_dot = vehicle.v, si_ddot = vehicle.a;
+    double sf_dot = speed_limit;
+    if (vehicle.v < speed_limit/2.0) {
+      tf += 2;
+      sf_dot *= 0.75;
+    }
+    double v_ave = 0.5*(vehicle.v + sf_dot);
+    double sf = vehicle.s + v_ave*tf;
+
+    double df = dest_lane * lane_width + lane_width/2.0;
+    vector<double> s_vec = { si, si_dot, si_ddot, sf, sf_dot, 0 };
+    vector<double> d_vec = { vehicle.d, 0, 0, df, 0, 0, 0};
+    Traj traj(tf, s_vec, d_vec, vehicle.lane());
+    return traj;
+  }
+
+  void set_lane(Vehicle& vehicle, int dest_lane) {
+    this->dest_lane = dest_lane;
+  }
+
+  virtual vector<std::reference_wrapper<Behaviour>> next_actions(Vehicle& vehicle, Environment& env, BehaviourPlanner& bp) override;
+
+//  virtual Behaviour& next_behaviour(Vehicle& vehicle, Environment& env, Planner& planner) override;
 //  virtual void effect(Vehicle& vehicle, Environment& env, int nsteps) override;
-//  virtual vector<std::reference_wrapper<Behaviour>> next_actions(Vehicle& vehicle, Environment& env) override;
+//
 //
 //  vector<double> make_poly(double tf, double d_init, double d_final) {
 //    double t = tf, t2 = t*t, t3 = t2*t, t4 = t3*t, t5 = t4*t;
@@ -744,7 +791,8 @@ class LaneChange: public Behaviour {
 
 class SlowDown: public Behaviour {
  public:
-  SlowDown(BehaviourPlanner& bp, string name): Behaviour(name, bp) {};
+  SlowDown(): Behaviour("SD") {};
+  virtual vector<std::reference_wrapper<Behaviour>> next_actions(Vehicle& vehicle, Environment& env, BehaviourPlanner& bp) override;
 //  virtual void effect(Vehicle& vehicle, Environment& env, int nsteps) override;
 //  virtual double cost(Vehicle& vehicle, Environment& env, bool debug = false) override {
 //    double speed_cost = 1;
@@ -752,6 +800,9 @@ class SlowDown: public Behaviour {
 //    return speed_cost;
 //  }
 };
+
+
+
 
 
 class BehaviourPlanner {
@@ -764,51 +815,56 @@ class BehaviourPlanner {
   Behaviour* last_action = &kl;
 
  public:
-  BehaviourPlanner(): kl(*this, "KL"), sd(*this, "SD"), lc(*this, "LC"), rc(*this, "RC") {
-  }
 
-//  Behaviour& keepLane() {
-//    return this->kl;
-//  }
-//
-//  Behaviour& leftChange(Vehicle& vehicle, int lane) {
-//    //this->lc.set_lane(vehicle, lane);
-//    return this->lc;
-//  }
-//
-//  Behaviour& rightChange(Vehicle& vehicle, int lane) {
-//    //this->rc.set_lane(vehicle, lane);
-//    return this->rc;
-//  }
-//
-//  Behaviour& slowDown() {
-//    return this->sd;
-//  }
+  BehaviourPlanner(): lc("LC", 0), rc("RC", 0) {}
 
   Traj convolute(Vehicle& vehicle, Environment& env, Planner& p) {
-    return last_action->convolute(vehicle, env, p);
-  }
-
-//  Behaviour& behaviour(Vehicle& vehicle, Environment& env) {
-//    auto actions = last_action->next_actions(vehicle, env);
+    auto actions = last_action->next_actions(vehicle, env, *this);
 //    auto min_action = *min_element(actions.begin(), actions.end(),
 //         [&vehicle, &env](const std::reference_wrapper<Behaviour> a, const std::reference_wrapper<Behaviour> b) {
 //            return a.get().cost(vehicle, env) < b.get().cost(vehicle, env);
 //          } );
-//    auto next_action = &min_action.get();
-//    bool changed = last_action!=next_action;
-//    if (changed) {
-//      cout << last_action->name << endl;
-//      for (auto a: actions) {
-//        Behaviour& b = a.get();
-//        b.cost(vehicle, env, changed);
-//        cout << endl;
-//      }
-//    }
-//    last_action = next_action;
-//    return *last_action;
+    last_action = &actions[0].get();
+    return last_action->convolute(vehicle, env, p);
+  }
+
+  Behaviour& keepLane() {
+    return this->kl;
+  }
+
+  Behaviour& leftChange(Vehicle& vehicle, int lane) {
+    this->lc.set_lane(vehicle, lane);
+    return this->lc;
+  }
+
+  Behaviour& rightChange(Vehicle& vehicle, int lane) {
+    this->rc.set_lane(vehicle, lane);
+    return this->rc;
+  }
+
+  Behaviour& slowDown() {
+    return this->sd;
+  }
+//
+//  Behaviour& next_action(Vehicle& vehicle, Environment& env) {
 //  }
 };
+
+vector<std::reference_wrapper<Behaviour>> KeepLane::next_actions(Vehicle& vehicle, Environment& env, BehaviourPlanner& bp) {
+  if (vehicle.iter > 500){
+    return { bp.leftChange(vehicle, 0) };
+  }
+  return { bp.keepLane() };
+}
+
+vector<std::reference_wrapper<Behaviour>> LaneChange::next_actions(Vehicle& vehicle, Environment& env, BehaviourPlanner& bp) {
+  return { bp.keepLane() };
+}
+
+vector<std::reference_wrapper<Behaviour>> SlowDown::next_actions(Vehicle& vehicle, Environment& env, BehaviourPlanner& bp) {
+  return { bp.keepLane() };
+}
+
 
 //void KeepLane::effect(Vehicle& vehicle, Environment& env, int nsteps) {
 //  double dest_d = vehicle.lane()*lane_width + 2;
@@ -865,6 +921,9 @@ class TrajectoryGenerator {
     Traj traj = bp.convolute(vehicle, env, p);
     cout<<  " with ";
     for(auto s: traj.s_vec) cout << s << ", ";
+    cout<<  " and ";
+    for(auto d: traj.d_vec) cout << d << ", ";
+
     cout << endl;
     auto pts = traj.points(this->step_duration, p);
     for (auto p: pts) this->points.push(p);
