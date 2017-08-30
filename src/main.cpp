@@ -69,30 +69,30 @@ void plot_debug1(Planner& planner, BehaviourPlanner& bp, TrajectoryGenerator& tr
 
 }
 
-void plot_debug2(Planner& planner, BehaviourPlanner& bp, TrajectoryGenerator& traj_gen, Environment& env, Highway highway) {
-
-  vector<double> thetas, errs1, errs2;
-  double ds = 60, d = 6;
-  for(double s=1200; s<1400.0; s=s+60.0) {
-    thetas.push_back(planner.theta(s));
-    double err = planner.curve_error(s, s+ds, d);
-    double projected_s = planner.projected_s(s, s+ds-err, d);
-    errs1.push_back(err);
-    errs2.push_back(s+ds-projected_s);
-  }
-  plt::subplot(2,2,1);
-  plt::plot(thetas);
-  plt::subplot(2,2,2);
-  highway.plot_highway();
-  plt::subplot(2,2,3);
-  plt::plot(errs1);
-  plt::subplot(2,2,4);
-  plt::plot(errs2);
-
-  plt::show();
-  exit(0);
-
-}
+//void plot_debug2(Planner& planner, BehaviourPlanner& bp, TrajectoryGenerator& traj_gen, Environment& env, Highway highway) {
+//
+//  vector<double> thetas, errs1, errs2;
+//  double ds = 60, d = 6;
+//  for(double s=1200; s<1400.0; s=s+60.0) {
+//    thetas.push_back(planner.theta(s));
+//    double err = planner.curve_error(s, s+ds, d);
+//    double projected_s = planner.projected_s(s, s+ds-err, d);
+//    errs1.push_back(err);
+//    errs2.push_back(s+ds-projected_s);
+//  }
+//  plt::subplot(2,2,1);
+//  plt::plot(thetas);
+//  plt::subplot(2,2,2);
+//  highway.plot_highway();
+//  plt::subplot(2,2,3);
+//  plt::plot(errs1);
+//  plt::subplot(2,2,4);
+//  plt::plot(errs2);
+//
+//  plt::show();
+//  exit(0);
+//
+//}
 
 void plot_debug3(Planner& planner, BehaviourPlanner& bp, TrajectoryGenerator& traj_gen, Environment& env, Highway highway) {
   vector<double> xpts, ypts, xpts1, ypts1;
@@ -100,7 +100,7 @@ void plot_debug3(Planner& planner, BehaviourPlanner& bp, TrajectoryGenerator& tr
     auto xy = planner.getXY(s, 0);
     xpts.push_back(xy[0]);
     ypts.push_back(xy[1]);
-    xy = planner.getXY_lane1(s);
+    xy = planner.getXY(s, 6);
     xpts1.push_back(xy[0]);
     ypts1.push_back(xy[1]);
   }
