@@ -34,42 +34,83 @@ string hasData(string s) {
   return "";
 }
 
-void plot_debug(Planner planner, Highway highway) {
-  //double car_s = 124.834, car_d = 6.16483;
-  //double car_s = 390, car_d = 6.16483;
-  double car_s = 124.834, car_d = 6.16483;
-  Car car = Car(909.48, 1128.67, car_s, car_d,  0, 0);
-
-  double x = 0, y = 0, prev_dist = 0;
-  vector<double> ddist, dvel, infl_x, infl_y;
-  vector<double> xpts1, ypts1;
-
+void plot_debug1(Planner& planner, BehaviourPlanner& bp, TrajectoryGenerator& traj_gen, Environment& env, Highway highway) {
   Vehicle vehicle(planner);
-  vehicle.init(909.48, 1128.67, car_s, car_d,  0, 0);
-  vehicle.move(50*240, car_d, 0.02, 20, 2, 2);
+  double vehicle_s = 3900, vehicle_d = 6;
+  //double vehicle_s = 124.834, vehicle_d = 6.16483;
+  vector<double> xy = planner.getXY(vehicle_s, vehicle_d);
+  double vehicle_x = xy[0], vehicle_y = xy[1];
+  cout << "x - "<< vehicle_x << ", y - "<< vehicle_y << endl;
 
-  plt::subplot(4,1,1);
-  highway.plot_highway(car, 15, 2);
-  plt::plot(vehicle.verr_xs, vehicle.verr_ys, "r.");
-  plt::subplot(4,1,2);
+  vehicle.init(vehicle_x, vehicle_y, vehicle_s, vehicle_d,  0, speed_limit);
+  int nsteps = 3000;
+  for(int i=0; i< nsteps; i++)
+    traj_gen.effect(vehicle, 1, env, planner);
+
+  plt::subplot(2,2,1);
+  Car car(vehicle_x, vehicle_y, vehicle_s, vehicle_d,  0, speed_limit);
+  highway.plot_highway(car);
+  plt::plot(vehicle.xs, vehicle.ys, "r.");
+  plt::subplot(2,2,2);
+  //vehicle.vs.erase(vehicle.vs.begin(), vehicle.vs.begin()+200);
   plt::plot(vehicle.vs);
-  plt::subplot(4,1,3);
-  vehicle.as.erase(vehicle.as.begin(), vehicle.as.begin()+2);
-  plt::plot(vehicle.as);
-  plt::subplot(4,1,4);
-  vehicle.js.erase(vehicle.js.begin(), vehicle.js.begin()+3);
-  plt::plot(vehicle.verr);
-
-
-    cout << max_element(vehicle.as.begin(), vehicle.as.end()) - vehicle.as.begin() << ", "<< min_element(vehicle.as.begin(), vehicle.as.end()) - vehicle.as.begin() << endl;
-    cout << max_element(vehicle.js.begin(), vehicle.js.end()) - vehicle.js.begin() << ", "<< min_element(vehicle.js.begin(), vehicle.js.end()) - vehicle.js.begin() << endl;
-    cout << *max_element(vehicle.js.begin(), vehicle.js.end()) << ", "<< *min_element(vehicle.js.begin(), vehicle.js.end()) << endl;
-
-  cout << "violated speed at " << vehicle.verr_xs.size() << endl;
+  plt::plot({0.0, 1000.0}, {49.3*speed_conv, 49.3*speed_conv}, "g-");
+  plt::subplot(2,2,3);
+  //vehicle.as.erase(vehicle.as.begin(), vehicle.as.begin()+2);
+  plt::plot(vehicle.aerr);
+  //plt::plot({0.0, 1000.0}, {10.0, 10.0}, "g-");
+  plt::subplot(2,2,4);
+  //vehicle.ss.erase(vehicle.ss.begin(), vehicle.ss.begin()+200);
+  //plt::plot(vector<double>(vehicle.vs.begin()+1000, vehicle.vs.end()));
+  plt::plot({0.0, 1000.0}, {speed_limit, speed_limit}, "g-");
 
   plt::show();
   exit(0);
 
+}
+
+void plot_debug2(Planner& planner, BehaviourPlanner& bp, TrajectoryGenerator& traj_gen, Environment& env, Highway highway) {
+
+  vector<double> thetas, errs1, errs2;
+  double ds = 60, d = 6;
+  for(double s=1200; s<1400.0; s=s+60.0) {
+    thetas.push_back(planner.theta(s));
+    double err = planner.curve_error(s, s+ds, d);
+    double projected_s = planner.projected_s(s, s+ds-err, d);
+    errs1.push_back(err);
+    errs2.push_back(s+ds-projected_s);
+  }
+  plt::subplot(2,2,1);
+  plt::plot(thetas);
+  plt::subplot(2,2,2);
+  highway.plot_highway();
+  plt::subplot(2,2,3);
+  plt::plot(errs1);
+  plt::subplot(2,2,4);
+  plt::plot(errs2);
+
+  plt::show();
+  exit(0);
+
+}
+
+void plot_debug3(Planner& planner, BehaviourPlanner& bp, TrajectoryGenerator& traj_gen, Environment& env, Highway highway) {
+  vector<double> xpts, ypts, xpts1, ypts1;
+  for(double s=4500; s<5000; s+=0.5) {
+    auto xy = planner.getXY(s, 0);
+    xpts.push_back(xy[0]);
+    ypts.push_back(xy[1]);
+    xy = planner.getXY_lane1(s);
+    xpts1.push_back(xy[0]);
+    ypts1.push_back(xy[1]);
+  }
+
+  highway.plot_highway(120,140);
+
+  plt::plot(xpts, ypts, "r");
+  plt::plot(xpts1, ypts1, "g");
+  plt::show();
+  exit(0);
 }
 
 int main() {
@@ -113,18 +154,20 @@ int main() {
 
   BehaviourPlanner bp;
 
+  TrajectoryGenerator traj_gen(bp);
+
   Environment env;
 
   Highway highway = Highway(map_waypoints_x, map_waypoints_y, map_waypoints_s, map_waypoints_dx, map_waypoints_dy);
 
-  //plot_debug(planner, highway);
+  //plot_debug1(planner, bp, traj_gen, env, highway);
 
   Vehicle vehicle(planner);
 
 
 
   int step = 0;
-  h.onMessage([&vehicle,&bp,&env,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&vehicle,&bp,&env,&traj_gen,&planner,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -177,10 +220,16 @@ int main() {
             if (!vehicle.initialized)
               vehicle.init(car_x, car_y, car_s, car_d, car_yaw, car_speed * speed_conv);
 
-            Behaviour& b = bp.behaviour(vehicle, env);
+//            if (!vehicle.initialized)
+//              vehicle.init(car_x, car_y, 3900, car_d, car_yaw, car_speed * speed_conv);
+
             int nsteps = 50 - previous_path_x.size();
             //cout << "nsteps - "<< nsteps << endl;
-            b.effect(vehicle, env, nsteps);
+            //Behaviour& b = bp.behaviour(vehicle, env);
+            //b.effect(vehicle, env, nsteps);
+
+            vehicle.trim(nsteps);
+            traj_gen.effect(vehicle, nsteps, env, planner);
 
 
             for (int i = 1; i < vehicle.xs.size(); ++i) {
