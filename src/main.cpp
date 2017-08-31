@@ -113,6 +113,7 @@ void plot_debug3(Planner& planner, BehaviourPlanner& bp, TrajectoryGenerator& tr
   exit(0);
 }
 
+
 int main() {
   uWS::Hub h;
 
@@ -209,10 +210,15 @@ int main() {
           	vector<double> next_x_vals;
           	vector<double> next_y_vals;
 
+            int nsteps = 50 - previous_path_x.size();
+
           	for (int i = 0; i < sensor_fusion.size(); ++i) {
           	  auto data = sensor_fusion[i];
-              env.update(data[0], data[1], data[2], data[3], data[4], data[5], data[6]);
+          	  double obs_d = data[6];
+              if (obs_d > 0)
+                env.update(data[0], data[1], data[2], data[3], data[4], data[5], data[6], 0.02*nsteps);
             }
+          	//cout << endl;
 
           	//cout << "Speed - " << env.lane_speed(0, car_s) << ", " << env.lane_speed(1, car_s) << ", "<< env.lane_speed(2, car_s) << endl;
 
@@ -221,9 +227,8 @@ int main() {
               vehicle.init(car_x, car_y, car_s, car_d, car_yaw, car_speed * speed_conv);
 
 //            if (!vehicle.initialized)
-//              vehicle.init(car_x, car_y, 3900, car_d, car_yaw, car_speed * speed_conv);
+//              vehicle.init(car_x, car_y, 3000, car_d, car_yaw, car_speed * speed_conv);
 
-            int nsteps = 50 - previous_path_x.size();
             //cout << "nsteps - "<< nsteps << endl;
             //Behaviour& b = bp.behaviour(vehicle, env);
             //b.effect(vehicle, env, nsteps);
