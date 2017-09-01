@@ -223,6 +223,10 @@ int main() {
           	  double obs_d = data[6];
               if (obs_d > 0)
                 env.update(data[0], data[1], data[2], data[3], data[4], data[5], data[6], 0.02*nsteps);
+//              if (vehicle.iter > 200) {
+//                env.plot();
+//                exit(0);
+//              }
             }
           	//cout << endl;
 
