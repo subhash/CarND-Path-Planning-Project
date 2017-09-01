@@ -34,90 +34,6 @@ string hasData(string s) {
   return "";
 }
 
-void plot_debug4(Planner& planner, BehaviourPlanner& bp, TrajectoryGenerator& traj_gen, Environment& env, Highway highway) {
-  highway.plot_highway(0,10);
-  plt::show();
-  exit(0);
-}
-
-void plot_debug1(Planner& planner, BehaviourPlanner& bp, TrajectoryGenerator& traj_gen, Environment& env, Highway highway) {
-  Vehicle vehicle(planner);
-  double vehicle_s = 3900, vehicle_d = 6;
-  //double vehicle_s = 124.834, vehicle_d = 6.16483;
-  vector<double> xy = planner.getXY(vehicle_s, vehicle_d);
-  double vehicle_x = xy[0], vehicle_y = xy[1];
-  cout << "x - "<< vehicle_x << ", y - "<< vehicle_y << endl;
-
-  vehicle.init(vehicle_x, vehicle_y, vehicle_s, vehicle_d,  0, speed_limit);
-  int nsteps = 3000;
-  for(int i=0; i< nsteps; i++)
-    traj_gen.effect(vehicle, 1, env, planner);
-
-  plt::subplot(2,2,1);
-  Car car(vehicle_x, vehicle_y, vehicle_s, vehicle_d,  0, speed_limit);
-  highway.plot_highway(car);
-  plt::plot(vehicle.xs, vehicle.ys, "r.");
-  plt::subplot(2,2,2);
-  //vehicle.vs.erase(vehicle.vs.begin(), vehicle.vs.begin()+200);
-  plt::plot(vehicle.vs);
-  plt::plot({0.0, 1000.0}, {49.3*speed_conv, 49.3*speed_conv}, "g-");
-  plt::subplot(2,2,3);
-  //vehicle.as.erase(vehicle.as.begin(), vehicle.as.begin()+2);
-  plt::plot(vehicle.aerr);
-  //plt::plot({0.0, 1000.0}, {10.0, 10.0}, "g-");
-  plt::subplot(2,2,4);
-  //vehicle.ss.erase(vehicle.ss.begin(), vehicle.ss.begin()+200);
-  //plt::plot(vector<double>(vehicle.vs.begin()+1000, vehicle.vs.end()));
-  plt::plot({0.0, 1000.0}, {speed_limit, speed_limit}, "g-");
-
-  plt::show();
-  exit(0);
-
-}
-
-//void plot_debug2(Planner& planner, BehaviourPlanner& bp, TrajectoryGenerator& traj_gen, Environment& env, Highway highway) {
-//
-//  vector<double> thetas, errs1, errs2;
-//  double ds = 60, d = 6;
-//  for(double s=1200; s<1400.0; s=s+60.0) {
-//    thetas.push_back(planner.theta(s));
-//    double err = planner.curve_error(s, s+ds, d);
-//    double projected_s = planner.projected_s(s, s+ds-err, d);
-//    errs1.push_back(err);
-//    errs2.push_back(s+ds-projected_s);
-//  }
-//  plt::subplot(2,2,1);
-//  plt::plot(thetas);
-//  plt::subplot(2,2,2);
-//  highway.plot_highway();
-//  plt::subplot(2,2,3);
-//  plt::plot(errs1);
-//  plt::subplot(2,2,4);
-//  plt::plot(errs2);
-//
-//  plt::show();
-//  exit(0);
-//
-//}
-
-void plot_debug3(Planner& planner, BehaviourPlanner& bp, TrajectoryGenerator& traj_gen, Environment& env, Highway highway) {
-  vector<double> xpts, ypts, xpts1, ypts1;
-  for(double s=4500; s<5000; s+=0.5) {
-    auto xy = planner.getXY(s, 0);
-    xpts.push_back(xy[0]);
-    ypts.push_back(xy[1]);
-    xy = planner.getXY(s, 6);
-    xpts1.push_back(xy[0]);
-    ypts1.push_back(xy[1]);
-  }
-
-  highway.plot_highway(120,140);
-
-  plt::plot(xpts, ypts, "r");
-  plt::plot(xpts1, ypts1, "g");
-  plt::show();
-  exit(0);
-}
 
 
 int main() {
@@ -166,8 +82,6 @@ int main() {
   Environment env;
 
   Highway highway = Highway(map_waypoints_x, map_waypoints_y, map_waypoints_s, map_waypoints_dx, map_waypoints_dy);
-
-  //plot_debug4(planner, bp, traj_gen, env, highway);
 
   Vehicle vehicle(planner);
 
@@ -223,25 +137,11 @@ int main() {
           	  double obs_d = data[6];
               if (obs_d > 0)
                 env.update(data[0], data[1], data[2], data[3], data[4], data[5], data[6], 0.02*nsteps);
-//              if (vehicle.iter > 200) {
-//                env.plot();
-//                exit(0);
-//              }
             }
-          	//cout << endl;
-
-          	//cout << "Speed - " << env.lane_speed(0, car_s) << ", " << env.lane_speed(1, car_s) << ", "<< env.lane_speed(2, car_s) << endl;
 
 
             if (!vehicle.initialized)
               vehicle.init(car_x, car_y, car_s, car_d, car_yaw, car_speed * speed_conv);
-
-//            if (!vehicle.initialized)
-//              vehicle.init(car_x, car_y, 5000, car_d, car_yaw, car_speed * speed_conv);
-
-            //cout << "nsteps - "<< nsteps << endl;
-            //Behaviour& b = bp.behaviour(vehicle, env);
-            //b.effect(vehicle, env, nsteps);
 
             vehicle.trim(nsteps);
             traj_gen.effect(vehicle, nsteps, env, planner);
