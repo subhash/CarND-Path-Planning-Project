@@ -332,13 +332,13 @@ class Traj {
 public:
 
   double duration;
-  int ref_lane;
+  int ref_lane=-1;
 
   vector<double> s_vec, d_vec;
 
   Traj(double duration, vector<double> s_vec, vector<double> d_vec, int ref_lane, Planner& p): ref_lane(ref_lane) {
-    s_vec[0] = p.lane_spline_rev_s[ref_lane](s_vec[0]);
-    s_vec[3] = p.lane_spline_rev_s[ref_lane](s_vec[3]);
+    //s_vec[0] = p.lane_spline_rev_s[ref_lane](s_vec[0]);
+    //s_vec[3] = p.lane_spline_rev_s[ref_lane](s_vec[3]);
     this->s_vec = s_vec;
     this->d_vec = d_vec;
     this->duration = duration;
@@ -765,8 +765,7 @@ class Environment {
     return speed_limit;
   }
 
-  bool too_close(double s, double d) {
-    double s_tol = 30, d_tol = 2.5;
+  bool too_close(double s, double d, double s_tol, double d_tol) {
     for (auto const& el : obstacles) {
       Obstacle o = el.second;
       if (fabs(o.s - s) < s_tol && fabs(o.d - d) < d_tol)
@@ -839,7 +838,8 @@ class Behaviour {
     for (int i = 0; i < pts.size(); ++i) {
       double traj_s = pts[i].first, traj_d = pts[i].second;
       Environment predicted = env.predict(dt*(i+1));
-      cost += predicted.too_close(traj_s, traj_d);
+      if (predicted.too_close(traj_s, traj_d, 30, 2.5))
+        cost += 1.0;
     }
     return cost;
     //return predicted.collision_space(traj.s_vec[0], traj.s_vec[3], traj.d_vec[0], traj.d_vec[3]);
@@ -898,7 +898,11 @@ class KeepLane: public Behaviour {
   virtual Traj convolute(Vehicle& vehicle, Environment& env, Planner& p) override {
     double tf = 3.0; // sec
     double sf_dot = env.lane_speed(vehicle, vehicle.lane());
-    vector<double> s_vec = this->long_vector(vehicle.s, vehicle.v, vehicle.a, sf_dot, tf);
+
+    double si = vehicle.s;
+    si = p.lane_spline_rev_s[vehicle.lane()](si);
+
+    vector<double> s_vec = this->long_vector(si, vehicle.v, vehicle.a, sf_dot, tf);
     vector<double> d_vec = { vehicle.d, 0, 0, vehicle.d, 0, 0, 0};
     Traj traj(tf, s_vec, d_vec, vehicle.lane(), p);
     return traj;
@@ -918,7 +922,11 @@ class LaneChange: public Behaviour {
   virtual Traj convolute(Vehicle& vehicle, Environment& env, Planner& p) override {
     double tf = 7.0; // sec
     double sf_dot = env.lane_speed(vehicle, dest_lane);
-    vector<double> s_vec = this->long_vector(vehicle.s, vehicle.v, vehicle.a, sf_dot, tf);
+
+    double si = vehicle.s;
+    si = p.lane_spline_rev_s[vehicle.lane()](si);
+
+    vector<double> s_vec = this->long_vector(si, vehicle.v, vehicle.a, sf_dot, tf);
     double df = dest_lane * lane_width + lane_width/2.0;
     vector<double> d_vec = { vehicle.d, 0, 0, df, 0, 0, 0};
     Traj traj(tf, s_vec, d_vec, vehicle.lane(), p);
@@ -1090,7 +1098,7 @@ vector<std::reference_wrapper<Behaviour>> SlowDown::next_actions(Vehicle& vehicl
 
 class TrajectoryGenerator {
  private:
-  std::queue<vector<double>> points;
+  std::deque<vector<double>> points;
   BehaviourPlanner& bp;
   double step_duration;
 
@@ -1107,7 +1115,7 @@ class TrajectoryGenerator {
     for(auto d: traj.d_vec) cout << d << ", ";
     cout << endl;
     auto pts = traj.motion_vector(this->step_duration, p);
-    for (auto p: pts) this->points.push(p);
+    for (auto p: pts) this->points.push_back(p);
   }
 
   void effect(Vehicle& vehicle, int nsteps, Environment& env, Planner& p) {
@@ -1116,7 +1124,15 @@ class TrajectoryGenerator {
         this->refresh_trajectory(vehicle, env, p);
       }
       auto pt = points.front();
-      points.pop();
+//      if (env.too_close(pt[0], pt[1], 10, 1)) {
+//        cout << "Cancelling traj "<< endl;
+//        for (int j = 0; j < points.size(); ++j) {
+//          points.pop_back();
+//        }
+//        this->refresh_trajectory(vehicle, env, p);
+//        pt = points.front();
+//      }
+      points.pop_front();
       vehicle.move_to(pt[0], pt[1], pt[2], pt[3], 0.02, p);
     }
   }
