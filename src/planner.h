@@ -282,13 +282,22 @@ class Traj {
     return v;
   }
 
-  double acc_eval(vector<double> poly, double dt) {
-    double a = 0.0;
+  double v_eval(vector<double> poly, double dt) {
+    double v = 0.0;
     for (int i = 1; i < poly.size(); ++i) {
-      a += i * poly[i] * pow(dt, i-1);
+      v += i * poly[i] * pow(dt, i-1);
+    }
+    return v;
+  }
+
+  double a_eval(vector<double> poly, double dt) {
+    double a = 0.0;
+    for (int i = 2; i < poly.size(); ++i) {
+      a += i * poly[i] * (i-1) * pow(dt, i-2);
     }
     return a;
   }
+
 
   std::pair<vector<double>, vector<double>> make_poly(
       double tf, vector<double> s_vec, vector<double> d_vec) {
@@ -350,6 +359,20 @@ public:
     return pts;
   }
 
+  vector<vector<double>> motion_vector(double dt, Planner& p) {
+    int steps = this->duration/dt;
+    vector<vector<double>> pts;
+    for (int i = 0; i < steps; ++i) {
+      double s = poly_eval(this->spoly, (i+1) * dt);
+      double d = poly_eval(this->dpoly, (i+1) * dt);
+      double proj_s = p.lane_spline_s[ref_lane](s);
+      double v = v_eval(this->spoly, (i+1)*dt);
+      double a = a_eval(this->spoly, (i+1)*dt);
+      pts.push_back( { proj_s, d, v, a });
+    }
+    return pts;
+  }
+
 };
 
 
@@ -403,7 +426,7 @@ class Vehicle {
     return make_pair(v, a);
   }
 
-  void move_to(double proj_s, double d, double dt, Planner planner) {
+  void move_to(double proj_s, double d, double v, double a, double dt, Planner planner) {
     this->iter++;
 
     if (proj_s > max_s) proj_s -= 6945.554;
@@ -419,9 +442,9 @@ class Vehicle {
 //      // cout << this->s <<": > correct velocity "<< corr_v/speed_conv << " at iter " << this->iter << endl;
 //    }
 
-    double v = (s - this->s)/dt;
-    double a = (v - this->v)/dt;
-    double j = (a - this->a)/dt;
+//    double v = (s - this->s)/dt;
+//    double a = (v - this->v)/dt;
+//    double j = (a - this->a)/dt;
     double x = xy[0], y = xy[1];
 
 //    if (corr_a > 10 && this->iter > 1) {
@@ -437,15 +460,16 @@ class Vehicle {
     this->x = x;
     this->y = y;
     this->v = v;
-    if(this->iter > 1) this->a = a;
-    if(this->iter > 2) this->j = j;
+    this->a = a;
+    //if(this->iter > 1) this->a = a;
+    //if(this->iter > 2) this->j = j;
 
     this->xs.push_back(x);
     this->ys.push_back(y);
     this->ss.push_back(s);
     this->vs.push_back(v);
-    if(this->iter > 1) this->as.push_back(a);
-    if(this->iter > 2) this->js.push_back(j);
+    //if(this->iter > 1) this->as.push_back(a);
+    //if(this->iter > 2) this->js.push_back(j);
   }
 
 //
@@ -1066,7 +1090,7 @@ vector<std::reference_wrapper<Behaviour>> SlowDown::next_actions(Vehicle& vehicl
 
 class TrajectoryGenerator {
  private:
-  std::queue<pair<double, double>> points;
+  std::queue<vector<double>> points;
   BehaviourPlanner& bp;
   double step_duration;
 
@@ -1082,7 +1106,7 @@ class TrajectoryGenerator {
     cout<<  " and ";
     for(auto d: traj.d_vec) cout << d << ", ";
     cout << endl;
-    auto pts = traj.points(this->step_duration, p);
+    auto pts = traj.motion_vector(this->step_duration, p);
     for (auto p: pts) this->points.push(p);
   }
 
@@ -1093,7 +1117,7 @@ class TrajectoryGenerator {
       }
       auto pt = points.front();
       points.pop();
-      vehicle.move_to(pt.first, pt.second, 0.02, p);
+      vehicle.move_to(pt[0], pt[1], pt[2], pt[3], 0.02, p);
     }
   }
 
