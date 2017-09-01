@@ -34,6 +34,12 @@ string hasData(string s) {
   return "";
 }
 
+void plot_debug4(Planner& planner, BehaviourPlanner& bp, TrajectoryGenerator& traj_gen, Environment& env, Highway highway) {
+  highway.plot_highway(0,10);
+  plt::show();
+  exit(0);
+}
+
 void plot_debug1(Planner& planner, BehaviourPlanner& bp, TrajectoryGenerator& traj_gen, Environment& env, Highway highway) {
   Vehicle vehicle(planner);
   double vehicle_s = 3900, vehicle_d = 6;
@@ -125,7 +131,7 @@ int main() {
   vector<double> map_waypoints_dy;
 
   // Waypoint map to read from
-  string map_file_ = "../data/highway_map.csv";
+  string map_file_ = "../data/highway_map_bosch1.csv";
   // The max s value before wrapping around the track back to 0
   double max_s = 6945.554;
 
@@ -161,7 +167,7 @@ int main() {
 
   Highway highway = Highway(map_waypoints_x, map_waypoints_y, map_waypoints_s, map_waypoints_dx, map_waypoints_dy);
 
-  //plot_debug1(planner, bp, traj_gen, env, highway);
+  //plot_debug4(planner, bp, traj_gen, env, highway);
 
   Vehicle vehicle(planner);
 
@@ -227,7 +233,7 @@ int main() {
               vehicle.init(car_x, car_y, car_s, car_d, car_yaw, car_speed * speed_conv);
 
 //            if (!vehicle.initialized)
-//              vehicle.init(car_x, car_y, 3000, car_d, car_yaw, car_speed * speed_conv);
+//              vehicle.init(car_x, car_y, 5000, car_d, car_yaw, car_speed * speed_conv);
 
             //cout << "nsteps - "<< nsteps << endl;
             //Behaviour& b = bp.behaviour(vehicle, env);

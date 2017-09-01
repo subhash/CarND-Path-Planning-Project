@@ -146,6 +146,7 @@ class Highway {
       plt::plot(xs, ys);
       to = dxs.size();
     }
+    cout << "from "<< from <<", to "<< to << endl;
     for (int i = from; i < to; ++i) {
       plt::plot({xs[i], xs[i]+width*dxs[i]}, {ys[i], ys[i]+width*dys[i]}, "g");
       plt::plot({xs[i]+width*dxs[i]}, {ys[i]+width*dys[i]}, "g.");
