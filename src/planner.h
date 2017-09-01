@@ -771,7 +771,7 @@ class SlowDown: public Behaviour {
   }
 
   virtual vector<double> proximity_tolerance() override {
-    return { 5.0, 0.5 };
+    return { 0.0, 0.0 };
   }
 
   virtual vector<std::reference_wrapper<Behaviour>> next_actions(Vehicle& vehicle, Environment& env, BehaviourPlanner& bp) override;
