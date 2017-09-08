@@ -17,7 +17,9 @@ using namespace std;
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 
-const double speed_conv = 0.44703, lane_width = 4.0, speed_limit = 49.0 * speed_conv;
+const double speed_conv = 0.44703, lane_width = 4.0, speed_limit = 49.0 * speed_conv, timestep = 0.02;
+//  double time = 0.02, speed_limit = 49.0 * speed_conv, acc_limit = 2, jerk_limit = 2;
+
 
 
 // For converting back and forth between radians and degrees.
@@ -228,6 +230,28 @@ class Planner {
     double dx = WP_spline_dx(s) * d, dy = WP_spline_dy(s) * d;
     return { x+dx, y+dy };
   }
+
+  void plot(int from = 0, int to = 10000, int width = 50) {
+    if (to > dxs.size()) {
+      plt::plot(xs, ys);
+      to = dxs.size();
+    }
+    for (int i = from; i < to; ++i) {
+      plt::plot({xs[i], xs[i]+width*dxs[i]}, {ys[i], ys[i]+width*dys[i]}, "g");
+      plt::plot({xs[i]+width*dxs[i]}, {ys[i]+width*dys[i]}, "g.");
+    }
+    double start_s = from*30, end_s = to*30;
+    for (int d = 0; d < 16; d+=4) {
+      vector<double> track_x, track_y;
+      for (double s = start_s; s < end_s; s+=10.0) {
+        vector<double> xy = getXY(s, d);
+        track_x.push_back(xy[0]);
+        track_y.push_back(xy[1]);
+      }
+      plt::plot(track_x, track_y, "b-");
+    }
+  }
+
 };
 
 class Traj {
@@ -318,7 +342,9 @@ public:
   }
 
   vector<pair<double, double>> samples(int n, Planner& p) {
-    return this->points(this->duration/n, p);
+    int total_pts = this->duration/timestep;
+    int dt = int(total_pts/n) * timestep;
+    return this->points(dt, p);
   }
 
   vector<vector<double>> motion_vector(double dt, Planner& p) {
@@ -335,6 +361,18 @@ public:
     return pts;
   }
 
+
+  void plot(double interval, Planner& p) {
+    auto pts = this->points(interval, p);
+    vector<double> xpts, ypts;
+    for (auto pt: pts) {
+      auto xy = p.getXY(pt.first, pt.second);
+      xpts.push_back(xy[0]);
+      ypts.push_back(xy[1]);
+    }
+    plt::plot(xpts, ypts, "b+");
+
+  }
 };
 
 
@@ -408,6 +446,11 @@ class Vehicle {
     this->ss.push_back(s);
     this->vs.push_back(v);
   }
+
+  void plot() {
+    plt::plot({this->x}, {this->y}, "g+");
+  }
+
 };
 
 
@@ -460,12 +503,95 @@ class Obstacle {
     this->speeds.push_back(this->speed());
   }
 
-  int lane() {
+  int lane() const {
     return int(d/lane_width);
   }
 
-  double speed() {
+  double speed() const {
     return sqrt(pow(this->vx, 2) + pow(this->vy, 2));
+  }
+
+};
+
+
+class Prediction {
+
+ private:
+  const double s_tol = 20, d_tol = 1.5;
+  map<int, vector<Obstacle>> predictions;
+  map<int, vector<Obstacle>> states;
+
+ public:
+  void update(int nt, Obstacle o) {
+    predictions[nt].push_back(o);
+    states[o.id].push_back(o);
+  }
+
+  double dist(Obstacle o, double s, double d) {
+    return sqrt(pow(o.s-s,2) + pow(o.d-d,2));
+  }
+
+  bool too_close(int nt, double s, double d) {
+    nt += 50;
+    vector<Obstacle> obstacles = predictions[nt];
+    for (auto const & o: obstacles) {
+      if (dist(o, s, d) < 6)
+        return true;
+    }
+    return false;
+  }
+
+  bool tail_ends(int nt, double s, double d) {
+    nt += 50;
+    vector<Obstacle> obstacles = predictions[nt];
+    for (auto const & o: obstacles) {
+      // same lane, in front
+      if (o.s > s && (o.lane() == int(d/lane_width))) {
+        if (dist(o, s, d) < 5)
+          return true;
+      }
+    }
+    return false;
+  }
+
+
+  int leading_obstacle(int nt, int lane, double s) {
+    double min_dist = std::numeric_limits<double>::max();
+    int min_id = -1;
+    for (auto const& o : predictions[nt]) {
+      double dist = o.s - s;
+      if (dist > 0 && dist < min_dist && o.lane() == lane) {
+        min_dist = dist;
+        min_id = o.id;
+      }
+    }
+    return min_id;
+  }
+
+  double lane_speed(int nt, Vehicle vehicle, int lane) {
+    nt += 50;
+    int id = leading_obstacle(nt, lane, vehicle.s);
+    if (id != -1) {
+      for (Obstacle& o: states[id]) {
+        // 2 second rule
+        if (dist(o, vehicle.s, vehicle.d) < vehicle.v * 2) {
+          return min(o.speed(), speed_limit);
+        }
+      }
+    }
+    return speed_limit;
+  }
+
+  void plot(Planner& p, int nt = 100000) {
+    for (auto const& el: states) {
+      auto obs = el.second;
+      if (nt > obs.size()) nt = obs.size();
+      for (int i=0; i<nt; i++) {
+        Obstacle& o = obs[i];
+        auto xy = p.getXY(o.s, o.d);
+        plt::plot({xy[0]}, {xy[1]}, "r.");
+      }
+    }
   }
 
 };
@@ -496,6 +622,23 @@ class Environment {
     }
     return predicted;
   }
+
+  Prediction prediction(double n_timesteps) {
+    Prediction pred;
+    for (auto const& el : obstacles) {
+      Obstacle o = el.second;
+      for (int nt = 0; nt < n_timesteps; ++nt) {
+        double dt = (nt+1) * timestep;
+        double s_diff = o.speed() * dt;
+        double d_diff = o.dv * dt;
+        Obstacle po;
+        po.update(o.id, o.x+o.vx*dt, o.y+o.vy*dt, o.vx, o.vy, o.s+s_diff, o.d+d_diff, dt);
+        pred.update(nt, po);
+      }
+    }
+    return pred;
+  }
+
 
   void plot() {
     cout << "Plotting "<< obstacles.size() << " obstacles " << endl;
@@ -608,11 +751,6 @@ class BehaviourPlanner;
 class Behaviour {
 
  protected:
-  double time = 0.02, speed_limit = 49.0 * speed_conv, acc_limit = 2, jerk_limit = 2;
-
-  double decide_speed(Vehicle& vehicle, Environment& env, double speed_limit) {
-    return env.lane_speed(vehicle, vehicle.lane());
-  }
 
   vector<double> long_vector(double s_init, double v_init, double a_init, double v_final, double &tf) {
     double si = s_init, si_dot = v_init, si_ddot = a_init;
@@ -629,44 +767,70 @@ class Behaviour {
  public:
   string name;
   Behaviour(string name): name(name) {}
-  virtual Traj convolute(Vehicle& vehicle, Environment& env, Planner& p) {
-    cout << "Base convolute "<< endl;
-    return Traj(0, vector<double>(), vector<double>(), 0, p);
-  }
-  virtual vector<std::reference_wrapper<Behaviour>> next_actions(Vehicle& vehicle, Environment& env, BehaviourPlanner& bp) {
+  virtual Traj convolute(Vehicle& vehicle, Prediction& pred, Planner& p) = 0;
+  virtual vector<std::reference_wrapper<Behaviour>> next_actions(Vehicle& vehicle, Prediction& pred, BehaviourPlanner& bp) {
     return {};
   }
 
-  virtual double safety_cost(Vehicle& vehicle, Environment& env, Traj& traj, Planner& p) {
+//  virtual bool will_collide(Prediction& pred, int nt, double s, double d) {
+//    return pred.too_close(nt, s, d);
+//  }
+
+  map<int, pair<double, double>> path_in_time(Traj traj, Planner& p) {
     int n_pts = 4;
-    vector<pair<double, double>> pts = traj.samples(n_pts, p);
-    double dt = traj.duration/n_pts; // timestep for prediction and pt gen
-    double cost = 0;
+    int total_pts = traj.duration/timestep;
+    int interval_steps = int(total_pts/n_pts);
+    double interval =  interval_steps * timestep;
+    vector<pair<double, double>> pts = traj.points(interval, p);
+    map<int, pair<double, double>> path;
     for (int i = 0; i < pts.size(); ++i) {
-      double traj_s = pts[i].first, traj_d = pts[i].second;
-      Environment predicted = env.predict(1.0 + dt*(i+1));
-      vector<double> prox_tol = this->proximity_tolerance();
-      if (predicted.too_close(traj_s, traj_d, prox_tol[0], prox_tol[1])) {
+      path[interval_steps*(i+1)] = pts[i];
+    }
+    return path;
+  }
+
+  virtual bool collides_with(Prediction& pred, int nt, double s, double d) {
+    return pred.too_close(nt, s, d);
+  }
+
+  virtual double safety_cost(Vehicle& vehicle, Prediction& pred, Traj& traj, Planner& p) {
+    map<int, pair<double, double>> path = path_in_time(traj, p);
+    double cost = 0;
+    for (auto el: path) {
+      auto pt = el.second;
+      double traj_s = pt.first, traj_d = pt.second;
+      if (this->collides_with(pred, el.first, traj_s, traj_d)) {
         cost += 1.0;
       }
     }
+
+//    if (cost > 2 && (this->name == "LC" || this->name == "RC")) {
+//      int total_pts = traj.duration/timestep;
+//      int interval_steps = int(total_pts/4);
+//      double interval =  interval_steps * timestep;
+//      //p.plot(0, 10);
+//
+//      pred.plot(p, 50);
+//      traj.plot(interval, p);
+//      plt::show();
+//      exit(0);
+//    }
+
+
     return cost;
   }
 
-  virtual vector<double> proximity_tolerance() {
-    return { 15.0, 1.0 };
-  }
-
-  virtual double efficiency_cost(Vehicle& vehicle, Environment& env, Traj& traj) {
+  virtual double efficiency_cost(Vehicle& vehicle, Prediction& pred, Traj& traj) {
     int dest_lane = int(traj.d_vec[3]/lane_width);
     double dest_v = traj.s_vec[4];
-    double lane_speed = env.predict(traj.duration).lane_speed(vehicle, dest_lane);
-    return (lane_speed < speed_limit) + (dest_v < vehicle.v);
+    int last_timestep = int(traj.duration/timestep);
+    //double lane_speed = pred.lane_speed(last_timestep, vehicle, dest_lane);
+    return (dest_v < 0.9 * vehicle.v) + (dest_v < 0.95*speed_limit);
   }
 
-  virtual double cost(Vehicle& vehicle, Environment& env, Planner& p) {
-    Traj traj = this->convolute(vehicle, env, p);
-    return 10*this->safety_cost(vehicle, env, traj, p) + this->efficiency_cost(vehicle, env, traj);
+  virtual double cost(Vehicle& vehicle, Prediction& pred, Planner& p) {
+    Traj traj = this->convolute(vehicle, pred, p);
+    return 10*this->safety_cost(vehicle, pred, traj, p) + this->efficiency_cost(vehicle, pred, traj);
   }
 
   void plot(Vehicle& vehicle, Environment& env, Traj& traj, Planner& p) {
@@ -693,21 +857,27 @@ class KeepLane: public Behaviour {
 
   KeepLane(): Behaviour("KL") {};
 
-  virtual Traj convolute(Vehicle& vehicle, Environment& env, Planner& p) override {
+  virtual Traj convolute(Vehicle& vehicle, Prediction& pred, Planner& p) override {
     double tf = 3.0; // sec
-    double sf_dot = env.lane_speed(vehicle, vehicle.lane());
+    double df = vehicle.lane() * lane_width + lane_width/2.0;
+    int nt = tf/timestep;
+    double sf_dot = pred.lane_speed(0, vehicle, vehicle.lane());
 
     double si = vehicle.s;
     si = p.lane_spline_rev_s[vehicle.lane()](si);
 
     vector<double> s_vec = this->long_vector(si, vehicle.v, vehicle.a, sf_dot, tf);
-    double df = vehicle.lane() * lane_width + lane_width/2.0;
     vector<double> d_vec = { vehicle.d, 0, 0, df, 0, 0, 0};
     Traj traj(tf, s_vec, d_vec, vehicle.lane(), p);
     return traj;
   }
 
-  virtual vector<std::reference_wrapper<Behaviour>> next_actions(Vehicle& vehicle, Environment& env, BehaviourPlanner& bp) override;
+  virtual bool collides_with(Prediction& pred, int nt, double s, double d) override {
+    return pred.tail_ends(nt, s, d);
+  }
+
+
+  virtual vector<std::reference_wrapper<Behaviour>> next_actions(Vehicle& vehicle, Prediction& pred, BehaviourPlanner& bp) override;
 };
 
 
@@ -720,29 +890,26 @@ class LaneChange: public Behaviour {
 
   LaneChange(string name, int lane): Behaviour(name), dest_lane(lane) {}
 
-  virtual Traj convolute(Vehicle& vehicle, Environment& env, Planner& p) override {
-    double tf = 6.0; // sec
-    double sf_dot = env.lane_speed(vehicle, dest_lane);
+  virtual Traj convolute(Vehicle& vehicle, Prediction& pred, Planner& p) override {
+    double tf = 3.0; // sec
+    int nt = tf/timestep;
+    double df = dest_lane * lane_width + lane_width/2.0;
+    double sf_dot = pred.lane_speed(0, vehicle, dest_lane);
 
     double si = vehicle.s;
     si = p.lane_spline_rev_s[vehicle.lane()](si);
 
     vector<double> s_vec = this->long_vector(si, vehicle.v, vehicle.a, sf_dot, tf);
-    double df = dest_lane * lane_width + lane_width/2.0;
     vector<double> d_vec = { vehicle.d, 0, 0, df, 0, 0, 0};
     Traj traj(tf, s_vec, d_vec, vehicle.lane(), p);
     return traj;
-  }
-
-  virtual vector<double> proximity_tolerance() override {
-    return { 20.0, 1.5 };
   }
 
   void set_lane(Vehicle& vehicle, int dest_lane) {
     this->dest_lane = dest_lane;
   }
 
-  virtual vector<std::reference_wrapper<Behaviour>> next_actions(Vehicle& vehicle, Environment& env, BehaviourPlanner& bp) override;
+  virtual vector<std::reference_wrapper<Behaviour>> next_actions(Vehicle& vehicle, Prediction& pred, BehaviourPlanner& bp) override;
 };
 
 
@@ -752,7 +919,7 @@ class SlowDown: public Behaviour {
 
  public:
   SlowDown(): Behaviour("SD") {};
-  virtual Traj convolute(Vehicle& vehicle, Environment& env, Planner& p) override {
+  virtual Traj convolute(Vehicle& vehicle, Prediction& pred, Planner& p) override {
     double tf = 2.0; // sec
     double sf_dot = ref_speed;
 
@@ -766,15 +933,15 @@ class SlowDown: public Behaviour {
     return traj;
   }
 
+  virtual bool collides_with(Prediction& pred, int nt, double s, double d) override {
+    return pred.tail_ends(nt, s, d);
+  }
+
   void set_speed(double speed) {
     this->ref_speed = speed;
   }
 
-  virtual vector<double> proximity_tolerance() override {
-    return { 0.0, 0.0 };
-  }
-
-  virtual vector<std::reference_wrapper<Behaviour>> next_actions(Vehicle& vehicle, Environment& env, BehaviourPlanner& bp) override;
+  virtual vector<std::reference_wrapper<Behaviour>> next_actions(Vehicle& vehicle, Prediction& pred, BehaviourPlanner& bp) override;
 };
 
 
@@ -791,20 +958,20 @@ class BehaviourPlanner {
 
   BehaviourPlanner(): lc("LC", 0), rc("RC", 0) {}
 
-  Traj convolute(Vehicle& vehicle, Environment& env, Planner& p) {
-    vector<reference_wrapper<Behaviour>> actions = last_action->next_actions(vehicle, env, *this);
+  Traj convolute(Vehicle& vehicle, Prediction& pred, Planner& p) {
+    vector<reference_wrapper<Behaviour>> actions = last_action->next_actions(vehicle, pred, *this);
     cout << "Costs: ";
     for(reference_wrapper<Behaviour> a: actions) {
       Behaviour& b = a.get();
-      cout << "[" << b.name << "-" << b.cost(vehicle, env, p) << "]";
+      cout << "[" << b.name << "-" << b.cost(vehicle, pred, p) << "]";
     }
     auto min_action = *min_element(actions.begin(), actions.end(),
-         [&vehicle, &env, &p](const std::reference_wrapper<Behaviour> a, const std::reference_wrapper<Behaviour> b) {
-            return a.get().cost(vehicle, env, p) < b.get().cost(vehicle, env, p);
+         [&vehicle, &pred, &p](const std::reference_wrapper<Behaviour> a, const std::reference_wrapper<Behaviour> b) {
+            return a.get().cost(vehicle, pred, p) < b.get().cost(vehicle, pred, p);
           } );
     last_action = &min_action.get();
     cout << " ["<< last_action->name << "]";
-    Traj traj =  last_action->convolute(vehicle, env, p);
+    Traj traj =  last_action->convolute(vehicle, pred, p);
     return traj;
   }
 
@@ -829,7 +996,7 @@ class BehaviourPlanner {
 
 };
 
-vector<std::reference_wrapper<Behaviour>> KeepLane::next_actions(Vehicle& vehicle, Environment& env, BehaviourPlanner& bp) {
+vector<std::reference_wrapper<Behaviour>> KeepLane::next_actions(Vehicle& vehicle, Prediction& pred, BehaviourPlanner& bp) {
   vector<std::reference_wrapper<Behaviour>> behaviours = { bp.keepLane() };
   int lane = vehicle.lane();
   if (lane > 0) {
@@ -844,11 +1011,11 @@ vector<std::reference_wrapper<Behaviour>> KeepLane::next_actions(Vehicle& vehicl
   return behaviours;
 }
 
-vector<std::reference_wrapper<Behaviour>> LaneChange::next_actions(Vehicle& vehicle, Environment& env, BehaviourPlanner& bp) {
+vector<std::reference_wrapper<Behaviour>> LaneChange::next_actions(Vehicle& vehicle, Prediction& pred, BehaviourPlanner& bp) {
   return { bp.keepLane(), bp.slowDown(vehicle.v * 0.9) };
 }
 
-vector<std::reference_wrapper<Behaviour>> SlowDown::next_actions(Vehicle& vehicle, Environment& env, BehaviourPlanner& bp) {
+vector<std::reference_wrapper<Behaviour>> SlowDown::next_actions(Vehicle& vehicle, Prediction& pred, BehaviourPlanner& bp) {
   return { bp.keepLane(), bp.slowDown(vehicle.v * 0.9) };
 }
 
@@ -863,9 +1030,9 @@ class TrajectoryGenerator {
   TrajectoryGenerator(BehaviourPlanner& bp, double step_duration = 0.02): bp(bp), step_duration(step_duration) {
   }
 
-  void refresh_trajectory(Vehicle& vehicle, Environment& env, Planner& p) {
+  void refresh_trajectory(Vehicle& vehicle, Prediction& pred, Planner& p) {
     cout << "Refreshing "<< vehicle.s << " at "<< vehicle.iter ;
-    Traj traj = bp.convolute(vehicle, env, p);
+    Traj traj = bp.convolute(vehicle, pred, p);
     cout<<  " with ";
     for(auto s: traj.s_vec) cout << s << ", ";
     cout<<  " and ";
@@ -875,14 +1042,33 @@ class TrajectoryGenerator {
     for (auto p: pts) this->points.push_back(p);
   }
 
-  void effect(Vehicle& vehicle, int nsteps, Environment& env, Planner& p) {
+  void effect(Vehicle& vehicle, int nsteps, Prediction& pred, Planner& p) {
     for (int i = 0; i < nsteps; ++i) {
       if (points.size() <= 0) {
-        this->refresh_trajectory(vehicle, env, p);
+        this->refresh_trajectory(vehicle, pred, p);
+//        if (vehicle.iter > 800) {
+//          p.plot(5, 25, 2);
+//          vehicle.plot();
+//          pred.plot(p, 100);
+//          this->plot(p, 100);
+//          plt::show();
+//          exit(0);
+//        }
       }
       auto pt = points.front();
       points.pop_front();
       vehicle.move_to(pt[0], pt[1], pt[2], pt[3], 0.02, p);
+    }
+  }
+
+
+  void plot(Planner& p, int s = 10000) {
+    cout << "Points in gen - "<< points.size() << endl;
+    if (s>this->points.size()) s = points.size();
+    for (int i = 0; i < s; ++i) {
+      auto pt = this->points[i];
+      auto xy = p.getXY(pt[0], pt[1]);
+      plt::plot({xy[0]}, {xy[1]}, "g.");
     }
   }
 

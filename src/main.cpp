@@ -8,7 +8,6 @@
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "planner.h"
-#include "highway.h"
 #include "json.hpp"
 #include "matplotlibcpp.h"
 
@@ -34,6 +33,19 @@ string hasData(string s) {
   return "";
 }
 
+void plot_debug(Planner& p, Vehicle& v) {
+//  double vehicle_s = 3900, vehicle_d = 6;
+//  double vehicle_s = 124.834, vehicle_d = 6.16483;
+//  vector<double> xy = p.getXY(vehicle_s, vehicle_d);
+//  double vehicle_x = xy[0], vehicle_y = xy[1];
+//  v.init(vehicle_x, vehicle_y, vehicle_s, vehicle_d,  0, speed_limit);
+
+  p.plot();
+  v.plot();
+  plt::show();
+  exit(0);
+}
+
 
 
 int main() {
@@ -47,7 +59,7 @@ int main() {
   vector<double> map_waypoints_dy;
 
   // Waypoint map to read from
-  string map_file_ = "../data/highway_map_bosch1.csv";
+  string map_file_ = "../data/highway_map.csv";
   // The max s value before wrapping around the track back to 0
   double max_s = 6945.554;
 
@@ -81,10 +93,9 @@ int main() {
 
   Environment env;
 
-  Highway highway = Highway(map_waypoints_x, map_waypoints_y, map_waypoints_s, map_waypoints_dx, map_waypoints_dy);
-
   Vehicle vehicle(planner);
 
+  //plot_debug(planner, vehicle);
 
 
   int step = 0;
@@ -139,13 +150,14 @@ int main() {
                 env.update(data[0], data[1], data[2], data[3], data[4], data[5], data[6], 0.02*nsteps);
             }
 
+          	Prediction pred = env.prediction(7*50);
+
 
             if (!vehicle.initialized)
               vehicle.init(car_x, car_y, car_s, car_d, car_yaw, car_speed * speed_conv);
 
             vehicle.trim(nsteps);
-            traj_gen.effect(vehicle, nsteps, env, planner);
-
+            traj_gen.effect(vehicle, nsteps, pred, planner);
 
             for (int i = 1; i < vehicle.xs.size(); ++i) {
               next_x_vals.push_back(vehicle.xs[i]);
