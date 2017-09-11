@@ -17,7 +17,7 @@ using namespace std;
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 
-const double speed_conv = 0.44703, lane_width = 4.0, speed_limit = 49.0 * speed_conv, timestep = 0.02;
+const double speed_conv = 0.44703, lane_width = 4.0, speed_limit = 49.0 * speed_conv, timestep = 0.02, max_s = 6945.554;
 //  double time = 0.02, speed_limit = 49.0 * speed_conv, acc_limit = 2, jerk_limit = 2;
 
 
@@ -166,15 +166,14 @@ class Planner {
   tk::spline WP_spline_x, WP_spline_y, WP_spline_dx, WP_spline_dy, WP_spline_theta;
   std::vector<tk::spline> lane_spline_s, lane_spline_rev_s;
 
-
   Planner(vector<double> xs, vector<double> ys, vector<double> ss, vector<double> dxs, vector<double> dys):
     lane_spline_s(3), lane_spline_rev_s(3) {
 
-    xs.erase(xs.begin());
-    ys.erase(ys.begin());
-    ss.erase(ss.begin());
-    dxs.erase(dxs.begin());
-    dys.erase(dys.begin());
+//    xs.erase(xs.begin());
+//    ys.erase(ys.begin());
+//    ss.erase(ss.begin());
+//    dxs.erase(dxs.begin());
+//    dys.erase(dys.begin());
 
     this->xs = xs;
     this->ys = ys;
@@ -183,10 +182,17 @@ class Planner {
     this->dys = dys;
     this->size = xs.size();
 
-    WP_spline_x.set_points(ss, xs);
-    WP_spline_y.set_points(ss, ys);
-    WP_spline_dx.set_points(ss, dxs);
-    WP_spline_dy.set_points(ss, dys);
+    this->xs.push_back(this->xs[0]);
+    this->ys.push_back(this->ys[0]);
+    this->ss.push_back(max_s);
+    this->dxs.push_back(this->dxs[0]);
+    this->dys.push_back(this->dys[0]);
+    this->size += 1;
+
+    WP_spline_x.set_points(this->ss, this->xs);
+    WP_spline_y.set_points(this->ss, this->ys);
+    WP_spline_dx.set_points(this->ss, this->dxs);
+    WP_spline_dy.set_points(this->ss, this->dys);
 
 
     for (int i = 0; i < this->size; ++i) {
@@ -194,7 +200,7 @@ class Planner {
       this->thetas.push_back(theta);
     }
 
-    WP_spline_theta.set_points(ss, this->thetas);
+    WP_spline_theta.set_points(this->ss, this->thetas);
 
     for (int i=0; i < 3; i++) {
       this->setup_lane_splines(i);
@@ -209,7 +215,6 @@ class Planner {
     double err = 0.0;
 
     ss1.push_back(this->ss[0]);
-
     for (int i = 1; i < this->size; ++i) {
       int prev_pt = i-1;
       if (prev_pt < 0) {
@@ -219,37 +224,89 @@ class Planner {
       double theta1 = WP_spline_theta(prev_s), theta2 = WP_spline_theta(s);
       err += lane_offset*tan(theta2 - theta1);
       double proj_s = s + err;
+      if (proj_s < 0) cout << "s - " << s << "proj_s - " << proj_s << ", " << i << endl;
       ss1.push_back(proj_s);
     }
+
+//    vector<double> new_ss(this->ss);
+//    {
+//      new_ss.push_back(max_s);
+//      cout << new_ss.size() << ", "<< this->ss.size() << endl;
+//      double prev_s = this->ss[this->size-1], s = max_s;
+//      double theta1 = WP_spline_theta(prev_s), theta2 = WP_spline_theta(s);
+//      err += lane_offset*tan(theta2 - theta1);
+//      double proj_s = s + err;
+//      ss1.push_back(proj_s);
+//    }
+
+
     lane_spline_s[lane].set_points(ss1, this->ss);
     lane_spline_rev_s[lane].set_points(this->ss, ss1);
   }
 
   vector<double> getXY(double s, double d) {
+    s = fmod(s, max_s);
     double x = WP_spline_x(s), y = WP_spline_y(s);
     double dx = WP_spline_dx(s) * d, dy = WP_spline_dy(s) * d;
     return { x+dx, y+dy };
   }
 
+  double waypoint_s(double ln_s, int ref_lane) {
+    double lane_max_s = lane_s(max_s, ref_lane);
+    ln_s = fmod(ln_s, lane_max_s);
+    return lane_spline_s[ref_lane](ln_s);
+  }
+
+  double lane_s(double wp_s, int ref_lane) {
+    return lane_spline_rev_s[ref_lane](wp_s);
+  }
+
   void plot(int from = 0, int to = 10000, int width = 50) {
     if (to > dxs.size()) {
-      plt::plot(xs, ys);
+      //plt::plot(xs, ys);
       to = dxs.size();
     }
     for (int i = from; i < to; ++i) {
       plt::plot({xs[i], xs[i]+width*dxs[i]}, {ys[i], ys[i]+width*dys[i]}, "g");
       plt::plot({xs[i]+width*dxs[i]}, {ys[i]+width*dys[i]}, "g.");
     }
-    double start_s = from*30, end_s = to*30;
-    for (int d = 0; d < 16; d+=4) {
-      vector<double> track_x, track_y;
-      for (double s = start_s; s < end_s; s+=10.0) {
-        vector<double> xy = getXY(s, d);
-        track_x.push_back(xy[0]);
-        track_y.push_back(xy[1]);
-      }
-      plt::plot(track_x, track_y, "b-");
+    auto start_xy = this->getXY(0, 0);
+    plt::plot({start_xy[0]}, {start_xy[1]}, "rs");
+//    double start_s = from*30, end_s = to*30;
+//    for (int d = 0; d < 16; d+=4) {
+//      vector<double> track_x, track_y;
+//      for (double s = start_s; s < end_s; s+=10.0) {
+//        vector<double> xy = getXY(s, d);
+//        track_x.push_back(xy[0]);
+//        track_y.push_back(xy[1]);
+//      }
+//      plt::plot(track_x, track_y, "b-");
+//    }
+  }
+
+  void plot_splines(double from_s, double to_s) {
+    vector<double> xpts1, ypts1, xpts2, ypts2, xpts3, ypts3;
+    for (double s=from_s; s<to_s; s+=10){
+      //double throttled_s = fmod(s, max_s);
+      auto xy1 = this->getXY(s, 0);
+      xpts1.push_back(xy1[0]);
+      ypts1.push_back(xy1[1]);
+
+      double s2 = this->waypoint_s(s, 1);
+      auto xy2 = this->getXY(s2, 6);
+      xpts2.push_back(xy2[0]);
+      ypts2.push_back(xy2[1]);
+
+      double s3 = this->waypoint_s(s, 2);
+      auto xy3 = this->getXY(s3, 10);
+      xpts3.push_back(xy3[0]);
+      ypts3.push_back(xy3[1]);
+
     }
+    plt::plot(xpts1, ypts1, "g-");
+    plt::plot(xpts2, ypts2, "r-");
+    plt::plot(xpts3, ypts3, "b-");
+
   }
 
 };
@@ -335,7 +392,7 @@ public:
     for (int i = 0; i < steps; ++i) {
       double s = poly_eval(this->spoly, (i+1) * dt);
       double d = poly_eval(this->dpoly, (i+1) * dt);
-      double proj_s = p.lane_spline_s[ref_lane](s);
+      double proj_s = p.waypoint_s(s, ref_lane);
       pts.push_back(make_pair(proj_s, d));
     }
     return pts;
@@ -353,7 +410,7 @@ public:
     for (int i = 0; i < steps; ++i) {
       double s = poly_eval(this->spoly, (i+1) * dt);
       double d = poly_eval(this->dpoly, (i+1) * dt);
-      double proj_s = p.lane_spline_s[ref_lane](s);
+      double proj_s = p.waypoint_s(s, ref_lane);
       double v = v_eval(this->spoly, (i+1)*dt);
       double a = a_eval(this->spoly, (i+1)*dt);
       pts.push_back( { proj_s, d, v, a });
@@ -385,7 +442,6 @@ class Vehicle {
   int iter = 0;
   bool initialized = false;
   Planner& planner;
-  const double max_s = 6945.554;
 
   Vehicle(Planner& p): planner(p) {
     this->initialized = false;
@@ -429,7 +485,6 @@ class Vehicle {
   void move_to(double proj_s, double d, double v, double a, double dt, Planner planner) {
     this->iter++;
 
-    if (proj_s > max_s) proj_s -= 6945.554;
     vector<double> xy = planner.getXY(proj_s, d);
     double s = proj_s; //planner.lane_spline_rev_s[this->lane()](proj_s);
     double x = xy[0], y = xy[1];
@@ -864,7 +919,7 @@ class KeepLane: public Behaviour {
     double sf_dot = pred.lane_speed(0, vehicle, vehicle.lane());
 
     double si = vehicle.s;
-    si = p.lane_spline_rev_s[vehicle.lane()](si);
+    si = p.lane_s(si, vehicle.lane());
 
     vector<double> s_vec = this->long_vector(si, vehicle.v, vehicle.a, sf_dot, tf);
     vector<double> d_vec = { vehicle.d, 0, 0, df, 0, 0, 0};
@@ -897,7 +952,7 @@ class LaneChange: public Behaviour {
     double sf_dot = pred.lane_speed(0, vehicle, dest_lane);
 
     double si = vehicle.s;
-    si = p.lane_spline_rev_s[vehicle.lane()](si);
+    si = p.lane_s(si, vehicle.lane());
 
     vector<double> s_vec = this->long_vector(si, vehicle.v, vehicle.a, sf_dot, tf);
     vector<double> d_vec = { vehicle.d, 0, 0, df, 0, 0, 0};
@@ -924,7 +979,7 @@ class SlowDown: public Behaviour {
     double sf_dot = ref_speed;
 
     double si = vehicle.s;
-    si = p.lane_spline_rev_s[vehicle.lane()](si);
+    si = p.lane_s(si, vehicle.lane());
 
     vector<double> s_vec = this->long_vector(si, vehicle.v, vehicle.a, sf_dot, tf);
     double df = vehicle.lane() * lane_width + lane_width/2.0;

@@ -34,14 +34,10 @@ string hasData(string s) {
 }
 
 void plot_debug(Planner& p, Vehicle& v) {
-//  double vehicle_s = 3900, vehicle_d = 6;
-//  double vehicle_s = 124.834, vehicle_d = 6.16483;
-//  vector<double> xy = p.getXY(vehicle_s, vehicle_d);
-//  double vehicle_x = xy[0], vehicle_y = xy[1];
-//  v.init(vehicle_x, vehicle_y, vehicle_s, vehicle_d,  0, speed_limit);
-
-  p.plot();
-  v.plot();
+  p.plot(0,5,1);
+  p.plot(175,1000,1);
+  p.plot_splines(6500, 7500);
+  //v.plot();
   plt::show();
   exit(0);
 }
@@ -96,7 +92,6 @@ int main() {
   Vehicle vehicle(planner);
 
   //plot_debug(planner, vehicle);
-
 
   int step = 0;
   h.onMessage([&vehicle,&bp,&env,&traj_gen,&planner,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
@@ -155,6 +150,9 @@ int main() {
 
             if (!vehicle.initialized)
               vehicle.init(car_x, car_y, car_s, car_d, car_yaw, car_speed * speed_conv);
+
+//            if (!vehicle.initialized)
+//              vehicle.init(car_x, car_y, 4500, car_d, car_yaw, car_speed * speed_conv);
 
             vehicle.trim(nsteps);
             traj_gen.effect(vehicle, nsteps, pred, planner);
