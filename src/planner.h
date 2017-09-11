@@ -270,8 +270,8 @@ class Planner {
       plt::plot({xs[i], xs[i]+width*dxs[i]}, {ys[i], ys[i]+width*dys[i]}, "g");
       plt::plot({xs[i]+width*dxs[i]}, {ys[i]+width*dys[i]}, "g.");
     }
-    auto start_xy = this->getXY(0, 0);
-    plt::plot({start_xy[0]}, {start_xy[1]}, "rs");
+    //auto start_xy = this->getXY(0, 0);
+    //plt::plot({start_xy[0]}, {start_xy[1]}, "rs");
 //    double start_s = from*30, end_s = to*30;
 //    for (int d = 0; d < 16; d+=4) {
 //      vector<double> track_x, track_y;
@@ -827,10 +827,6 @@ class Behaviour {
     return {};
   }
 
-//  virtual bool will_collide(Prediction& pred, int nt, double s, double d) {
-//    return pred.too_close(nt, s, d);
-//  }
-
   map<int, pair<double, double>> path_in_time(Traj traj, Planner& p) {
     int n_pts = 4;
     int total_pts = traj.duration/timestep;
@@ -858,19 +854,6 @@ class Behaviour {
         cost += 1.0;
       }
     }
-
-//    if (cost > 2 && (this->name == "LC" || this->name == "RC")) {
-//      int total_pts = traj.duration/timestep;
-//      int interval_steps = int(total_pts/4);
-//      double interval =  interval_steps * timestep;
-//      //p.plot(0, 10);
-//
-//      pred.plot(p, 50);
-//      traj.plot(interval, p);
-//      plt::show();
-//      exit(0);
-//    }
-
 
     return cost;
   }
@@ -1101,14 +1084,6 @@ class TrajectoryGenerator {
     for (int i = 0; i < nsteps; ++i) {
       if (points.size() <= 0) {
         this->refresh_trajectory(vehicle, pred, p);
-//        if (vehicle.iter > 800) {
-//          p.plot(5, 25, 2);
-//          vehicle.plot();
-//          pred.plot(p, 100);
-//          this->plot(p, 100);
-//          plt::show();
-//          exit(0);
-//        }
       }
       auto pt = points.front();
       points.pop_front();

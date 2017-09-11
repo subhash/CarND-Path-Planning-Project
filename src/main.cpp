@@ -34,9 +34,9 @@ string hasData(string s) {
 }
 
 void plot_debug(Planner& p, Vehicle& v) {
-  p.plot(0,5,1);
-  p.plot(175,1000,1);
-  p.plot_splines(6500, 7500);
+  //p.plot(0,5,1);
+  p.plot(143,146,5);
+  p.plot_splines(5050, 5150);
   //v.plot();
   plt::show();
   exit(0);
@@ -152,7 +152,7 @@ int main() {
               vehicle.init(car_x, car_y, car_s, car_d, car_yaw, car_speed * speed_conv);
 
 //            if (!vehicle.initialized)
-//              vehicle.init(car_x, car_y, 4500, car_d, car_yaw, car_speed * speed_conv);
+//              vehicle.init(car_x, car_y, 4500, 2, car_yaw, car_speed * speed_conv);
 
             vehicle.trim(nsteps);
             traj_gen.effect(vehicle, nsteps, pred, planner);
