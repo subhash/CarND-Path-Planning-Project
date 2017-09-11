@@ -12,125 +12,71 @@ Each waypoint in the list contains  [x,y,s,dx,dy] values. x and y are the waypoi
 
 The highway's waypoints loop around so the frenet s value, distance along the road, goes from 0 to 6945.554.
 
-## Basic Build Instructions
+### Reflections
 
-1. Clone this repo.
-2. Make a build directory: `mkdir build && cd build`
-3. Compile: `cmake .. && make`
-4. Run it: `./path_planning`.
+#### Problem space
 
-Here is the data provided from the Simulator to the C++ Program
+#### Architecture
 
-#### Main car's localization Data (No Noise)
+The most basic of functions this project performs is to send the car on a straight path along the highway. This is easier to do in Frenet space where `s` represents the longitudinal distance covered along the road and `d` represents the lateral distance from the waypoint line. This subsumes the curvature of the road, which would otherwise pose problems in cartesian space. We start by building a `Planner` which, given the waypoints, is capable to translating from Frenet to cartesian space.
 
-["x"] The car's x position in map coordinates
+##### Path Planner
 
-["y"] The car's y position in map coordinates
+Here's a view of the highway:
 
-["s"] The car's s position in frenet coordinates
+The waypoints provide a translation from `s` and `d` to cartesian `x` and `y`. They also indicate the curvature of the road at that point using `dx` and `dy`, the unit vectors that are components of the lateral `d` vector. These discrete waypoints are fed into spline functions `WP_spline_x`, `WP_spline_y`, `WP_spline_dx` and `WP_spline_dy`, which can now act as continuous functions capable of translating any `s` value to its corresponding vector values `x`, `y`, `dx`, `dy`. The translation to cartesian coordinates is very simple now: `(x + dx * d, y + dy * d)`
 
-["d"] The car's d position in frenet coordinates
+There remains one problem, though. `s` is actually a function that maps a given position in the road to the distance travelled. This function is strictly the same for straight roads. But with road curvature, this function differs for different lanes:
 
-["yaw"] The car's yaw angle in the map
-
-["speed"] The car's speed in MPH
-
-#### Previous path data given to the Planner
-
-//Note: Return the previous list but with processed points removed, can be a nice tool to show how far along
-the path has processed since last time. 
-
-["previous_path_x"] The previous list of x points previously given to the simulator
-
-["previous_path_y"] The previous list of y points previously given to the simulator
-
-#### Previous path's end s and d values 
-
-["end_path_s"] The previous list's last point's frenet s value
-
-["end_path_d"] The previous list's last point's frenet d value
-
-#### Sensor Fusion Data, a list of all other car's attributes on the same side of the road. (No Noise)
-
-["sensor_fusion"] A 2d vector of cars and then that car's [car's unique ID, car's x position in map coordinates, car's y position in map coordinates, car's x velocity in m/s, car's y velocity in m/s, car's s position in frenet coordinates, car's d position in frenet coordinates. 
-
-## Details
-
-1. The car uses a perfect controller and will visit every (x,y) point it recieves in the list every .02 seconds. The units for the (x,y) points are in meters and the spacing of the points determines the speed of the car. The vector going from a point to the next point in the list dictates the angle of the car. Acceleration both in the tangential and normal directions is measured along with the jerk, the rate of change of total Acceleration. The (x,y) point paths that the planner recieves should not have a total acceleration that goes over 10 m/s^2, also the jerk should not go over 50 m/s^3. (NOTE: As this is BETA, these requirements might change. Also currently jerk is over a .02 second interval, it would probably be better to average total acceleration over 1 second and measure jerk from that.
-
-2. There will be some latency between the simulator running and the path planner returning a path, with optimized code usually its not very long maybe just 1-3 time steps. During this delay the simulator will continue using points that it was last given, because of this its a good idea to store the last points you have used so you can have a smooth transition. previous_path_x, and previous_path_y can be helpful for this transition since they show the last points given to the simulator controller with the processed points already removed. You would either return a path that extends this previous path or make sure to create a new path that has a smooth transition with this last path.
-
-## Tips
-
-A really helpful resource for doing this project and creating smooth trajectories was using http://kluge.in-chemnitz.de/opensource/spline/, the spline function is in a single hearder file is really easy to use.
-
----
-
-## Dependencies
-
-* cmake >= 3.5
- * All OSes: [click here for installation instructions](https://cmake.org/install/)
-* make >= 4.1
-  * Linux: make is installed by default on most Linux distros
-  * Mac: [install Xcode command line tools to get make](https://developer.apple.com/xcode/features/)
-  * Windows: [Click here for installation instructions](http://gnuwin32.sourceforge.net/packages/make.htm)
-* gcc/g++ >= 5.4
-  * Linux: gcc / g++ is installed by default on most Linux distros
-  * Mac: same deal as make - [install Xcode command line tools]((https://developer.apple.com/xcode/features/)
-  * Windows: recommend using [MinGW](http://www.mingw.org/)
-* [uWebSockets](https://github.com/uWebSockets/uWebSockets)
-  * Run either `install-mac.sh` or `install-ubuntu.sh`.
-  * If you install from source, checkout to commit `e94b6e1`, i.e.
-    ```
-    git clone https://github.com/uWebSockets/uWebSockets 
-    cd uWebSockets
-    git checkout e94b6e1
-    ```
-
-## Editor Settings
-
-We've purposefully kept editor configuration files out of this repo in order to
-keep it as simple and environment agnostic as possible. However, we recommend
-using the following settings:
-
-* indent using spaces
-* set tab width to 2 spaces (keeps the matrices in source code aligned)
-
-## Code Style
-
-Please (do your best to) stick to [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
-
-## Project Instructions and Rubric
-
-Note: regardless of the changes you make, your project must be buildable using
-cmake and make!
+The above picture clearly illustrates how the outer lane has to "travel more" in order to be at the same position in the road as the inner lane. These errors tend to accumulate and cause speeding violations around curves. So, we maintain separate spline functions for each lanes - `lane_spline_s` and `lane_spline_rev_s` which translate lane-specific `s` values to waypoint-specific `s` values. The vehicle always tracks its `s` relative to the waypoint, but for generating trajectories, we have to use the `s` functions pertaining to the lanes in which the trajectories are being planned.
 
 
-## Call for IDE Profiles Pull Requests
+Lastly, we start with a buffer of `50` points in the first iteration and fill up the traversed points at every subsequent iteration. This takes care of the latency caused by the simulator requesting points and actually using them.
 
-Help your fellow students!
 
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. Similarly, we omitted IDE profiles in order to ensure
-that students don't feel pressured to use one IDE or another.
+##### Trajectory Generator
 
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE that you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
+Now that we have a mechanism to translate longitudinal motion to actual motion in cartesian space, we can venture out by incrementing `s` value at each timestep, while maintaining a steady `d` to move the car straight forward. Since the change in `s` represents velocity, we have constraints on the rate of change of `s`. We also have limits on the derivatives two levels down (acceleration and jerk). By taking small increments, we can certainly get beyond the limits, but the transition will not be smooth.
 
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
 
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
+Instead, we use the Jerk minimization trajectory mechanism to increment the distance forward `s` such that the first and second order derivatives change continuously and the third order derivative (jerk) is minimized. Note that this mechanism does not place any bounds on the velocity or acceleration, but that can be controlled by choosing conservative boundary conditions. The initial boundary conditions are fetched from the vehicle state. The final boundary conditions for velocity are specified by the desired speed and final acceleration is specified to be zero. The time of transition and final distance are specified by the behaviour planner. It's easy to see that the changes start small, grow to the required level and gently decrease towards the end. Since there are no abrupt changes, there are no spikes in acceleration or jerk.
 
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. My expectation is that most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
 
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
+
+
+With JMT, a lane change entails a very similar trajectory. The only difference is with the boundary conditions. `di` is the `d` value of the starting lane and `df` is that of the desired lane. Providing a sufficient `tf` (3-4 seconds) ensures that the lateral velocity and acceleration are smooth and within limits.
+
+##### Environment & Predictions
+
+Before we can attribute different behaviours to the car, we need to consider the environment with moving obstacles. Each obstacle is reported with the state vector `[x, y, vx, vy, s, d]`. This makes it easy to characterize its speed (`sqrt(pow(vx,2)+pow(vy,2))`). But when I observed the speed values over many iterations, I found spikes and invalid transitions. 
+
+
+This error was traced down to an error in reporting of `d` values too. One can see extreme negative values for `d` which are inadmissible. Once the environment was configured to reject negative `d` values, we saw a more plausible distribution in `d`
+
+
+This change brought back `speed` and `s` values within reasonable ranges too. 
+
+
+With valid state vectors for obstacles, we are able to predict the behaviour of these obstacles until a horizon. These predictions are generated for each timestep leading up to a horizon and used in the behaviour layer to compare obstacle positions to trajectory positions at a given timestep. The prediction has to also account for the latency caused by the buffering of trajectory points, upto `50` timesteps.
+
+
+##### Behaviour Planner
+
+Once the car is able to chart both straight and lane-change trajectories, we want to define definite behaviours like `KeepLane`, `ChangeLane`, `SlowDown` and form plans for when such behaviours are ideal. We start with a default `KeepLane` behaviour, which keeps the car moving ahead in the current lane at the maximum speed if possible. Else, the car tracks the vehicle in front and keeps its velocity. We use predicted positions of obstacles based on the timestep of the corresponding trajectory point.
+
+Each behaviour decides the next set of candidate behaviours, depending on the current lane. For each candidate behaviour, we evaluate efficiency cost and safety cost. Efficiency cost is accrued when a vehicle is decelerating or running significantly lower than the `speed_limit`. Safety cost is decided based on how many collision points the trajectory entails, based on the predicted positions of the obstacles. Safety cost is weighted an order above efficiency. Here are some safe paths as adjudged by the behaviour planner:
+
+
+
+Some behaviours are rejected because they may result in collisions:
+
+
+
+##### Summary 
+
+For the given track, this architecture seems to be sufficient. For more dynamic scenarios, it may be prudent to check the pipeline more frequently to detect possible collisions, cancel and possibly replan behaviours if necessary.
+
+
+
+
+
