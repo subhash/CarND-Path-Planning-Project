@@ -9,9 +9,9 @@
 #include "Eigen-3.3/Eigen/QR"
 #include "planner.h"
 #include "json.hpp"
-#include "matplotlibcpp.h"
-
-namespace plt = matplotlibcpp;
+//#include "matplotlibcpp.h"
+//
+//namespace plt = matplotlibcpp;
 using namespace std;
 
 // for convenience
@@ -33,14 +33,14 @@ string hasData(string s) {
   return "";
 }
 
-void plot_debug(Planner& p, Vehicle& v) {
-  //p.plot(0,5,1);
-  p.plot(143,146,5);
-  p.plot_splines(5050, 5150);
-  //v.plot();
-  plt::show();
-  exit(0);
-}
+//void plot_debug(Planner& p, Vehicle& v) {
+//  //p.plot(0,5,1);
+//  p.plot(143,146,5);
+//  p.plot_splines(5050, 5150);
+//  //v.plot();
+//  plt::show();
+//  exit(0);
+//}
 
 
 

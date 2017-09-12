@@ -5,10 +5,10 @@
 #include "Eigen-3.3/Eigen/Dense"
 #include "Eigen-3.3/Eigen/QR"
 
-#include "matplotlibcpp.h"
-
-namespace plt = matplotlibcpp;
-
+//#include "matplotlibcpp.h"
+//
+//namespace plt = matplotlibcpp;
+//
 
 #ifndef PLANNER_H_
 #define PLANNER_H_
@@ -261,53 +261,53 @@ class Planner {
     return lane_spline_rev_s[ref_lane](wp_s);
   }
 
-  void plot(int from = 0, int to = 10000, int width = 50) {
-    if (to > dxs.size()) {
-      //plt::plot(xs, ys);
-      to = dxs.size();
-    }
-    for (int i = from; i < to; ++i) {
-      plt::plot({xs[i], xs[i]+width*dxs[i]}, {ys[i], ys[i]+width*dys[i]}, "g");
-      plt::plot({xs[i]+width*dxs[i]}, {ys[i]+width*dys[i]}, "g.");
-    }
-    //auto start_xy = this->getXY(0, 0);
-    //plt::plot({start_xy[0]}, {start_xy[1]}, "rs");
-//    double start_s = from*30, end_s = to*30;
-//    for (int d = 0; d < 16; d+=4) {
-//      vector<double> track_x, track_y;
-//      for (double s = start_s; s < end_s; s+=10.0) {
-//        vector<double> xy = getXY(s, d);
-//        track_x.push_back(xy[0]);
-//        track_y.push_back(xy[1]);
-//      }
-//      plt::plot(track_x, track_y, "b-");
+//  void plot(int from = 0, int to = 10000, int width = 50) {
+//    if (to > dxs.size()) {
+//      //plt::plot(xs, ys);
+//      to = dxs.size();
 //    }
-  }
-
-  void plot_splines(double from_s, double to_s) {
-    vector<double> xpts1, ypts1, xpts2, ypts2, xpts3, ypts3;
-    for (double s=from_s; s<to_s; s+=10){
-      //double throttled_s = fmod(s, max_s);
-      auto xy1 = this->getXY(s, 0);
-      xpts1.push_back(xy1[0]);
-      ypts1.push_back(xy1[1]);
-
-      double s2 = this->waypoint_s(s, 1);
-      auto xy2 = this->getXY(s2, 6);
-      xpts2.push_back(xy2[0]);
-      ypts2.push_back(xy2[1]);
-
-      double s3 = this->waypoint_s(s, 2);
-      auto xy3 = this->getXY(s3, 10);
-      xpts3.push_back(xy3[0]);
-      ypts3.push_back(xy3[1]);
-
-    }
-    plt::plot(xpts1, ypts1, "g-");
-    plt::plot(xpts2, ypts2, "r-");
-    plt::plot(xpts3, ypts3, "b-");
-
-  }
+//    for (int i = from; i < to; ++i) {
+//      plt::plot({xs[i], xs[i]+width*dxs[i]}, {ys[i], ys[i]+width*dys[i]}, "g");
+//      plt::plot({xs[i]+width*dxs[i]}, {ys[i]+width*dys[i]}, "g.");
+//    }
+//    //auto start_xy = this->getXY(0, 0);
+//    //plt::plot({start_xy[0]}, {start_xy[1]}, "rs");
+////    double start_s = from*30, end_s = to*30;
+////    for (int d = 0; d < 16; d+=4) {
+////      vector<double> track_x, track_y;
+////      for (double s = start_s; s < end_s; s+=10.0) {
+////        vector<double> xy = getXY(s, d);
+////        track_x.push_back(xy[0]);
+////        track_y.push_back(xy[1]);
+////      }
+////      plt::plot(track_x, track_y, "b-");
+////    }
+//  }
+//
+//  void plot_splines(double from_s, double to_s) {
+//    vector<double> xpts1, ypts1, xpts2, ypts2, xpts3, ypts3;
+//    for (double s=from_s; s<to_s; s+=10){
+//      //double throttled_s = fmod(s, max_s);
+//      auto xy1 = this->getXY(s, 0);
+//      xpts1.push_back(xy1[0]);
+//      ypts1.push_back(xy1[1]);
+//
+//      double s2 = this->waypoint_s(s, 1);
+//      auto xy2 = this->getXY(s2, 6);
+//      xpts2.push_back(xy2[0]);
+//      ypts2.push_back(xy2[1]);
+//
+//      double s3 = this->waypoint_s(s, 2);
+//      auto xy3 = this->getXY(s3, 10);
+//      xpts3.push_back(xy3[0]);
+//      ypts3.push_back(xy3[1]);
+//
+//    }
+//    plt::plot(xpts1, ypts1, "g-");
+//    plt::plot(xpts2, ypts2, "r-");
+//    plt::plot(xpts3, ypts3, "b-");
+//
+//  }
 
 };
 
@@ -419,17 +419,17 @@ public:
   }
 
 
-  void plot(double interval, Planner& p) {
-    auto pts = this->points(interval, p);
-    vector<double> xpts, ypts;
-    for (auto pt: pts) {
-      auto xy = p.getXY(pt.first, pt.second);
-      xpts.push_back(xy[0]);
-      ypts.push_back(xy[1]);
-    }
-    plt::plot(xpts, ypts, "b+");
-
-  }
+//  void plot(double interval, Planner& p) {
+//    auto pts = this->points(interval, p);
+//    vector<double> xpts, ypts;
+//    for (auto pt: pts) {
+//      auto xy = p.getXY(pt.first, pt.second);
+//      xpts.push_back(xy[0]);
+//      ypts.push_back(xy[1]);
+//    }
+//    plt::plot(xpts, ypts, "b+");
+//
+//  }
 };
 
 
@@ -502,9 +502,9 @@ class Vehicle {
     this->vs.push_back(v);
   }
 
-  void plot() {
-    plt::plot({this->x}, {this->y}, "g+");
-  }
+//  void plot() {
+//    plt::plot({this->x}, {this->y}, "g+");
+//  }
 
 };
 
@@ -637,17 +637,17 @@ class Prediction {
     return speed_limit;
   }
 
-  void plot(Planner& p, int nt = 100000) {
-    for (auto const& el: states) {
-      auto obs = el.second;
-      if (nt > obs.size()) nt = obs.size();
-      for (int i=0; i<nt; i++) {
-        Obstacle& o = obs[i];
-        auto xy = p.getXY(o.s, o.d);
-        plt::plot({xy[0]}, {xy[1]}, "r.");
-      }
-    }
-  }
+//  void plot(Planner& p, int nt = 100000) {
+//    for (auto const& el: states) {
+//      auto obs = el.second;
+//      if (nt > obs.size()) nt = obs.size();
+//      for (int i=0; i<nt; i++) {
+//        Obstacle& o = obs[i];
+//        auto xy = p.getXY(o.s, o.d);
+//        plt::plot({xy[0]}, {xy[1]}, "r.");
+//      }
+//    }
+//  }
 
 };
 
@@ -695,57 +695,57 @@ class Environment {
   }
 
 
-  void plot() {
-    cout << "Plotting "<< obstacles.size() << " obstacles " << endl;
-    int size = obstacles.size();
-    int rows = 4;
-
-    Environment predicted = this->predict(3.0);
-
-    int i = 0;
-    for (auto const& el : obstacles) {
-      Obstacle o = el.second;
-      plt::subplot(rows,3,++i);
-      plt::plot(o.ss);
-      plt::plot({200 + 3/0.02}, {predicted.obstacles[o.id].s}, "r.");
-    }
-    plt::show();
-
-    i = 0;
-    for (auto const& el : obstacles) {
-      Obstacle o = el.second;
-      plt::subplot(rows,3,++i);
-      plt::plot(o.svs);
-      plt::plot({200 + 3/0.02}, {predicted.obstacles[o.id].d}, "r.");
-    }
-    plt::show();
-
-    i = 0;
-    for (auto const& el : obstacles) {
-      Obstacle o = el.second;
-      plt::subplot(rows,3,++i);
-      plt::plot(o.speeds);
-    }
-    plt::show();
-
-    i = 0;
-    for (auto const& el : obstacles) {
-      Obstacle o = el.second;
-      plt::subplot(rows,3,++i);
-      plt::plot(o.ds);
-    }
-    plt::show();
-
-    i = 0;
-    for (auto const& el : obstacles) {
-      Obstacle o = el.second;
-      plt::subplot(rows,3,++i);
-      plt::plot(o.dvs);
-    }
-    plt::show();
-
-
-  }
+//  void plot() {
+//    cout << "Plotting "<< obstacles.size() << " obstacles " << endl;
+//    int size = obstacles.size();
+//    int rows = 4;
+//
+//    Environment predicted = this->predict(3.0);
+//
+//    int i = 0;
+//    for (auto const& el : obstacles) {
+//      Obstacle o = el.second;
+//      plt::subplot(rows,3,++i);
+//      plt::plot(o.ss);
+//      plt::plot({200 + 3/0.02}, {predicted.obstacles[o.id].s}, "r.");
+//    }
+//    plt::show();
+//
+//    i = 0;
+//    for (auto const& el : obstacles) {
+//      Obstacle o = el.second;
+//      plt::subplot(rows,3,++i);
+//      plt::plot(o.svs);
+//      plt::plot({200 + 3/0.02}, {predicted.obstacles[o.id].d}, "r.");
+//    }
+//    plt::show();
+//
+//    i = 0;
+//    for (auto const& el : obstacles) {
+//      Obstacle o = el.second;
+//      plt::subplot(rows,3,++i);
+//      plt::plot(o.speeds);
+//    }
+//    plt::show();
+//
+//    i = 0;
+//    for (auto const& el : obstacles) {
+//      Obstacle o = el.second;
+//      plt::subplot(rows,3,++i);
+//      plt::plot(o.ds);
+//    }
+//    plt::show();
+//
+//    i = 0;
+//    for (auto const& el : obstacles) {
+//      Obstacle o = el.second;
+//      plt::subplot(rows,3,++i);
+//      plt::plot(o.dvs);
+//    }
+//    plt::show();
+//
+//
+//  }
 
   int leading_obstacle(int lane, double s) {
     double min_dist = std::numeric_limits<double>::max();
@@ -871,19 +871,19 @@ class Behaviour {
     return 10*this->safety_cost(vehicle, pred, traj, p) + this->efficiency_cost(vehicle, pred, traj);
   }
 
-  void plot(Vehicle& vehicle, Environment& env, Traj& traj, Planner& p) {
-    plt::plot(vehicle.xs, vehicle.ys, "r");
-    plt::plot({vehicle.x}, {vehicle.y}, "r+");
-    Obstacle& o = env.obstacles[1];
-    Obstacle& po = env.predict(3.0).obstacles[1];
-    vector<double> opt = p.getXY(po.s, po.d);
-    double s1 = traj.s_vec[0], s2 = traj.s_vec[3], d1 = traj.d_vec[0], d2= traj.d_vec[3];
-    cout << "s diff " << s2-s1 << ", d diff - "<< d2 - d2 << endl;
-    vector<double> pt1 = p.getXY(s1, d1), pt2 = p.getXY(s2, d1), pt3= p.getXY(s1, d2), pt4 = p.getXY(s2, d2) ;
-    plt::plot({pt1[0], pt2[0], pt3[0], pt4[0]}, {pt1[1], pt2[1], pt3[1], pt4[1]}, "g.");
-    plt::show();
-    exit(0);
-  }
+//  void plot(Vehicle& vehicle, Environment& env, Traj& traj, Planner& p) {
+//    plt::plot(vehicle.xs, vehicle.ys, "r");
+//    plt::plot({vehicle.x}, {vehicle.y}, "r+");
+//    Obstacle& o = env.obstacles[1];
+//    Obstacle& po = env.predict(3.0).obstacles[1];
+//    vector<double> opt = p.getXY(po.s, po.d);
+//    double s1 = traj.s_vec[0], s2 = traj.s_vec[3], d1 = traj.d_vec[0], d2= traj.d_vec[3];
+//    cout << "s diff " << s2-s1 << ", d diff - "<< d2 - d2 << endl;
+//    vector<double> pt1 = p.getXY(s1, d1), pt2 = p.getXY(s2, d1), pt3= p.getXY(s1, d2), pt4 = p.getXY(s2, d2) ;
+//    plt::plot({pt1[0], pt2[0], pt3[0], pt4[0]}, {pt1[1], pt2[1], pt3[1], pt4[1]}, "g.");
+//    plt::show();
+//    exit(0);
+//  }
 
   virtual ~Behaviour() {}
 };
@@ -1092,15 +1092,15 @@ class TrajectoryGenerator {
   }
 
 
-  void plot(Planner& p, int s = 10000) {
-    cout << "Points in gen - "<< points.size() << endl;
-    if (s>this->points.size()) s = points.size();
-    for (int i = 0; i < s; ++i) {
-      auto pt = this->points[i];
-      auto xy = p.getXY(pt[0], pt[1]);
-      plt::plot({xy[0]}, {xy[1]}, "g.");
-    }
-  }
+//  void plot(Planner& p, int s = 10000) {
+//    cout << "Points in gen - "<< points.size() << endl;
+//    if (s>this->points.size()) s = points.size();
+//    for (int i = 0; i < s; ++i) {
+//      auto pt = this->points[i];
+//      auto xy = p.getXY(pt[0], pt[1]);
+//      plt::plot({xy[0]}, {xy[1]}, "g.");
+//    }
+//  }
 
 
 };
